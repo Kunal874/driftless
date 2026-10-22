@@ -5,7 +5,7 @@ Each step lists **where it can break**. When something goes wrong, find the step
 
 ---
 
-## Flow 1 — One row change, end to end · 📐 (built across T03–T06)
+## Flow 1 — One row change, end to end · 🔨 steps 1–4 and 9 built in T03 (sink: T04, lanes: T06)
 
 1. The app runs `UPDATE products SET price_cents = 999 WHERE id = 42` and commits.
    - *Can break:* a table without a primary key. Once it's in a publication, Postgres
@@ -29,16 +29,18 @@ Each step lists **where it can break**. When something goes wrong, find the step
      then **stop** with an error naming the row (fail-stop, D-009). Never skip it.
 8. The lane reports "events of txn X applied". The checkpointer marks txn X complete once all
    its events, across all lanes, are applied.
-9. The checkpointer acks the highest commit LSN whose transaction **and every earlier one** are
-   complete. Postgres advances the slot; old WAL can be recycled.
+9. The checkpointer acks the highest commit **end** LSN whose transaction **and every earlier one**
+   are complete. Postgres advances the slot; old WAL can be recycled. (T03: one transaction at a
+   time, confirmed right after it's handled; rules in D-019.)
    - *Can break:* acking a later transaction while an earlier one is still in flight (data loss
-     on crash); never acking while idle (WAL grows forever, so ack the keepalive LSN when
+     on crash); acking one byte past the end (BUG-001: the next transaction can be skipped after
+     a restart); never acking while idle (WAL grows forever, so confirm the keepalive position when
      nothing is pending).
 10. A search for the product now shows the new price. Lag = time of step 7 − commit time (T09).
 
 ---
 
-## Flow 2 — Crash and restart · 📐 (tested in T04–T05)
+## Flow 2 — Crash and restart · 🔨 verified in T03 for the printing connector (T04–T05 with the sink)
 
 1. Driftless dies at any moment (`docker kill`, power cut, bug).
 2. Postgres still holds all WAL after the slot's confirmed LSN. Nothing is lost.

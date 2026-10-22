@@ -18,8 +18,13 @@ Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: 
   `description` (unchanged TOAST omitted); delete; 3-row txn grouped; truncate; 100k-row seed txn.
   **No acks yet by design**, so every start replays everything since the slot was created
   (`confirmed_flush_lsn` still `0/71F31D8`, 43 MB retained).
-- Next step: **T03.4**: confirm protocol (`src/source/lsn.ts` already written, uncommitted), idle
-  acks, keepalive replies, crash/replay test, and reproducing the library's +1 overshoot
+- T03.4 done: confirm protocol in `src/main.ts` (D-019) + `src/source/lsn.ts` (+ tests).
+  **BUG-001 reproduced and fixed**: the library's `acknowledge()` adds 1, which can skip the next
+  transaction after a restart (`scripts/repro-ack-off-by-one.ts`, `docs/bugs/BUG-001-…`). Verified: kill
+  inside the ack window → slot unchanged; restart re-delivers only the un-acked txn; idle connector
+  advances the slot to the server's WAL position. Note: the repro script fast-forwards the slot with
+  `pg_replication_slot_advance`, so the T03.3 test changes were skipped (test data only).
+- Next step: **T03.5**: decoder unit tests (`src/source/decode.test.ts` written, passing, uncommitted)
 
 ## pg-logical-replication 2.5.0: what reading its source showed (T03.1)
 

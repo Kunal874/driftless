@@ -3,6 +3,7 @@ import { LogicalReplicationService, PgoutputPlugin, type Pgoutput } from 'pg-log
 import * as config from './config.ts';
 import { ensureReplicationSetup } from './source/replication.ts';
 import { transactionAssembler, type Transaction } from './source/decode.ts';
+import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 
 const db = new pg.Client(config.pgConfig);
 await db.connect();
@@ -17,11 +18,24 @@ const plugin = new PgoutputPlugin({ protoVersion: 1, publicationNames: [config.p
 const assemble = transactionAssembler();
 const queue: Pgoutput.Message[] = []; // ponytail: unbounded; bounded + paused stream in T08
 let draining = false;
+let txnOpen = false; // a BEGIN has been handled but its transaction isn't confirmed yet
+let confirmed = lsnToBigInt(startLsn); // everything before this WAL position is handled
 
 service.on('data', (_lsn: string, msg: Pgoutput.Message) => {
-  queue.push(msg);
+  queue.push(msg); // synchronous, so a later keepalive always sees this message as pending
   void drain();
 });
+
+service.on('heartbeat', (walEnd: string, _time: number, replyRequested: boolean) => {
+  // Idle = every message received so far is handled and confirmed. The stream arrives in order, so the
+  // server's walEnd then covers nothing we still owe: confirming it keeps the slot moving while only
+  // unpublished tables change (otherwise their WAL piles up behind the slot).
+  const idle = !draining && !txnOpen && queue.length === 0;
+  const target = idle ? lsnToBigInt(walEnd) : confirmed;
+  if (target > confirmed) void confirm(target).catch(fail);
+  else if (replyRequested) void sendStatus(confirmed).catch(fail); // "still here", position unchanged
+});
+
 service.on('error', fail);
 
 async function drain(): Promise<void> {
@@ -29,8 +43,12 @@ async function drain(): Promise<void> {
   draining = true;
   try {
     for (let msg = queue.shift(); msg; msg = queue.shift()) {
+      if (msg.tag === 'begin') txnOpen = true;
       const txn = assemble(msg);
-      if (txn) await handle(txn);
+      if (txn) {
+        await handle(txn);
+        txnOpen = false;
+      }
     }
   } catch (err) {
     fail(err);
@@ -41,6 +59,22 @@ async function drain(): Promise<void> {
 
 async function handle(txn: Transaction): Promise<void> {
   console.log(describe(txn));
+  if (config.debugAckDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, config.debugAckDelayMs));
+  await confirm(lsnToBigInt(txn.commitEndLsn)); // ack only after handling (D-006)
+  console.log(`  confirmed ${txn.commitEndLsn}`);
+}
+
+// Tells Postgres everything before `end` is handled, so it may recycle that WAL. Never moves backwards.
+async function confirm(end: bigint): Promise<void> {
+  if (end <= confirmed) return;
+  if (await sendStatus(end)) confirmed = end;
+}
+
+// The library reports lsn + 1, but Postgres wants the END position itself (that's what its own subscriber
+// sends). Passing an end position straight through confirms one byte too far and can skip the next
+// transaction after a restart (docs/bugs/BUG-001), so subtract the 1 the library adds.
+function sendStatus(end: bigint): Promise<boolean> {
+  return service.acknowledge(bigIntToLsn(end - 1n));
 }
 
 function describe(txn: Transaction): string {

@@ -24,6 +24,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-016 | Deterministic seed data + one workload definition | Accepted | T02 |
 | D-017 | New dependency versions must be at least 14 days old | Accepted | T03 |
 | D-018 | TRUNCATE is streamed and handled, not filtered out | Accepted | T03 |
+| D-019 | The confirm protocol: exact end positions, idle confirms, own queue | Accepted | T03 |
 
 ---
 
@@ -179,3 +180,24 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   leaves every deleted row in the index forever. That's silent drift, and handling it is one sink call.
 - **Consequences:** in T06 a truncate must act as a barrier across lanes: everything before it is applied
   first, and nothing after it is applied before it.
+
+### D-019 — The confirm protocol: exact end positions, idle confirms, own queue
+- **Decision:** (`src/main.ts`)
+  1. Both library auto-acks are off: `{ auto: false, timeoutSeconds: 0 }`.
+  2. After a transaction is handled, confirm its `commitEndLsn`, an *end* position, which is exactly what
+     Postgres's own subscriber sends. Pass it as `end − 1` because the library adds 1 (BUG-001).
+  3. When idle (nothing received is unhandled or unconfirmed), confirm the keepalive's position, so the
+     slot advances while only unpublished tables change.
+  4. When busy and the server asks for a reply, re-send the current position ("alive", no progress).
+  5. The confirmed position starts at the slot's `confirmed_flush_lsn` and never moves backwards.
+  6. Incoming messages go into Driftless's own queue synchronously, not the library's `flowControl` queue,
+     so a keepalive can never look "idle" while messages are still waiting.
+- **Why:** each rule closes a way to lose data or pin WAL. (1) The auto-acks confirm work on *receipt*.
+  (2) `+1` can skip the next transaction after a restart. (3) Without idle confirms, WAL from other tables
+  piles up behind the slot. (4) Without replies, `wal_sender_timeout` (60 s) drops the connection.
+  (6) With the library's queue, a keepalive parsed in the same network chunk as unhandled messages
+  would look idle.
+- **Proof (2026-10-22):** killed inside the ack window → slot unchanged; restart re-delivered the un-acked
+  transaction and not the acked one; an idle connector advanced the slot to the server's exact WAL position.
+- **Consequences:** T08 must bound the queue and pause the socket itself. While the socket is paused,
+  keepalive requests aren't read, so T08 must also send periodic status updates.
