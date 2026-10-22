@@ -88,6 +88,10 @@ running at 8 lanes. Time from the seed finishing until caught up:
 **Decision from these numbers:** defaults are 8 lanes and `batchMax` 5000 (D-022). That's **~750×** the unbatched
 throughput on this machine (lower bound: start-up time is included).
 
+**These numbers depend on the index (re-measured in T09, 2026-10-23).** The same command on a bigger index (195,393
+documents vs ~105,000, and a much larger vocabulary, see §8) drains **2,810 tx/s** instead of 6,752. Meilisearch's
+cost per batch grows with its word dictionary. Same-index comparisons are in §9.
+
 **Steady load:** at 200 tx/s for 30 s (5,805 transactions), Driftless kept up throughout: caught up 13 ms after
 the load stopped, ~5 changes per write, 60–100 transactions in flight. 0 drift.
 
@@ -158,11 +162,85 @@ The permanent setting is `max_slot_wal_keep_size=1GB` (in `docker-compose.yml`).
 
 ---
 
+## 8. End-to-end lag at fixed write rates (T09)
+
+**What lag means here:** from the transaction's commit in Postgres (the timestamp in its WAL COMMIT message) until it
+and every transaction before it are applied in Meilisearch, i.e. until it may be confirmed. Measured in the
+checkpointer, exported as the `driftless_lag_seconds` histogram (`GET /metrics`).
+
+**Command:** `node scripts/bench-lag.ts RATE 60 CLIENTS`, with the connector running in Docker (same machine clock as
+Postgres: measured < 1 ms apart from inside the connector container). It snapshots `/metrics`, runs the standard
+workload at RATE for 60 s, samples the queue gauges every second, waits until caught up, snapshots again, and
+computes quantiles from the bucket differences. Its quantile math was checked against Prometheus's
+`histogram_quantile` on the same run: identical to 0.01 s (p50 2.19 s, p99 2.89 s).
+
+**Series:** 2026-10-23 01:39–01:46 IST, run in this order, connector 8 lanes / `batchMax` 5000, index ~150k → ~185k
+documents during the series. Every row is one 60-second run.
+
+| Target tx/s | Achieved (pgbench) | Clients | Lag p50 | p95 | p99 | One write p50 | Changes/write | Max changes waiting | Caught up after stop |
+|---|---|---|---|---|---|---|---|---|---|
+| 200 | 199.5 | 4 | 2.34 s | 3.34 s | **3.97 s** | 1.36 s | 21 | 174 | 1.5 s |
+| 500 | 499.1 | 4 | 2.73 s | 3.39 s | **3.64 s** | 1.64 s | 58 | 458 | 2.0 s |
+| 1000 | 998.8 | 8 | 3.35 s | 4.40 s | **4.88 s** | 1.81 s | 139 | 1,025 | 2.5 s |
+| 2000 | 1,856.6 ¹ | 8 | 5.48 s | 7.62 s | 7.92 s | 2.93 s | 385 | 3,206 | 3.5 s |
+| 4000 | 3,841.9 ¹ | 16 | 11.66 s | 14.67 s | ≤ 15 s ² | 6.67 s | 1,318 | 15,274 | 8.5 s |
+| 6000 | 4,782.1 ¹ | 16 | 12.83 s | 27.04 s | 15–30 s ² | 6.21 s | 1,735 | 24,842 | 10.1 s |
+
+¹ pgbench couldn't keep its schedule (average schedule lag 0.66 s / 1.44 s / 4.22 s): that's as fast as Postgres in
+this Docker VM could commit the workload, so the load generator, not Driftless, set these rates.
+² Interpolated inside wide buckets (10–15 s, 15–30 s): 14.93 s and 29.41 s only mean "in that bucket".
+
+**Kept up at every rate.** Backpressure never engaged (0 paused samples). The queue rose and fell rather than
+climbing, and Driftless caught up 1.5–10 s after the load stopped. In Prometheus, p99 over 15 s windows stayed flat
+for the whole ~3,800 tx/s minute. **The highest rate measured, ~4,800 tx/s, was the load generator's limit**; the
+upper bound for Driftless itself is the backlog-drain rate (§4, §9).
+
+**Where the time goes: Meilisearch, not Driftless.** Lag ≈ 1.7–1.9 × one Meilisearch write at every rate: a change
+usually arrives while its lane's write is in progress, waits for it, then rides the next one. One write is mostly
+Meilisearch's own per-batch work. At T09.1 (200 tx/s, ~70 documents per batch) a batch took ~560 ms, of which
+**420 ms was "post processing words > word fst"**: rebuilding its dictionary of every distinct word in the index
+(`GET /batches` → `progressTrace`). The synthetic workload makes that dictionary grow without end: every description
+rewrite adds a random `md5` word. So write time, and with it lag, **drifts upward as the index grows** (e.g. the
+1000 tx/s run repeated 7 minutes later: p50 3.35 s → 4.10 s, §9). Natural batching is what keeps up: from 200 to
+~3,800 tx/s, writes per second fell (about 6 → under 2) while changes per write grew 63× (21 → 1,318).
+
+## 9. Lanes: throughput vs lag (T09)
+
+**Steady load, 1000 tx/s:** `node scripts/bench-lag.ts 1000 60 8` with `DRIFTLESS_LANES` set per run, in this order
+(A-B-A), 2026-10-23 01:47–01:52 IST, `batchMax` 5000, index ~185k documents. The Meilisearch columns come from its
+task timestamps (`GET /tasks`, enqueued → started → finished) in each run's window.
+
+| Order | Lanes | Lag p50 | p95 | p99 | One write p50 | Changes/write | Tasks per Meili batch | Task queued in Meili | Meili batch indexing | Caught up |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | 1.83 s | 2.95 s | **3.84 s** | 1.16 s | 694 | 1.8 | 0.04 s | 1.07 s | 0.9 s |
+| 2 | 8 | 4.10 s | 4.92 s | **4.99 s** | 2.24 s | 158 | 7.8 | 0.95 s | 1.13 s | 3.2 s |
+| 3 | 1 | 2.11 s | 3.09 s | **3.78 s** | 1.36 s | 804 | 1.9 | 0.02 s | 1.31 s | 0.6 s |
+| 4 | 4 | 4.45 s | 5.80 s | **6.50 s** | 2.37 s | 340 | 4.0 | 1.07 s | 1.23 s | 3.0 s |
+
+**Why 1 lane wins here:** Meilisearch indexes one batch at a time per index (86–98 % busy in every run) and merges all
+queued tasks into it. More lanes don't add indexing parallelism; each lane's task just waits ~1 s behind the batch in
+progress. With 1 lane, the waiting happens inside Driftless instead, where changes pile up and ride the next write.
+
+**Backlog drain on the same index (195k documents),** 2026-10-23 01:53–01:56 IST, `scripts/bench-drain.sh LANES
+BATCH_MAX 600 30` (~17,900-transaction backlog, start-up included), every run 0 drift:
+
+| Lanes × batchMax | Drained in | Throughput |
+|---|---|---|
+| 8 × 5,000 (default) | 6.3 s | **2,810 tx/s** |
+| 1 × 40,000 | 8.4 s | 2,132 tx/s |
+| 1 × 5,000 | 10.6 s | 1,700 tx/s |
+
+Lanes are more than a bigger batch: parallel requests overlap the HTTP, JSON and task polling around each
+Meilisearch batch. **Decision (D-027):** keep 8 lanes by default, because a backlog (downtime, bulk load, backfill)
+is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearch.
+
+---
+
 ## Resume claims: status
 
 | Claim (BUILD_PLAN Part 0) | Status |
 |---|---|
 | 0 mismatched documents out of [N] after [M] updates/deletes while SIGKILLed every [30 s] | **measured at 200 tx/s**: 0 drift over 101,729 rows after 119,764 transactions and 20 SIGKILLs (T06); T09 repeats it as the headline run |
-| End-to-end lag p99 < [X] ms at [N] writes/s | not measured yet (T09) |
-| Lanes + batching raised throughput from [A] to [B] | **measured**: 9 → 6,752 transactions/s (backlog drain, §4) |
+| End-to-end lag p99 < [X] ms at [N] writes/s | **measured (§8, §9)**: p99 **< 4 s at 500 tx/s and < 5 s at 1,000 tx/s** (commit in Postgres → searchable in Meilisearch, 8 lanes); 3.8 s at 1,000 tx/s with 1 lane. Kept up with ~4,800 tx/s, the most this machine's Postgres could generate. Lag is bounded by Meilisearch's ~1 s per-batch indexing on a 150–190k-document index |
+| Lanes + batching raised throughput from [A] to [B] | **measured**: 9 → 6,752 transactions/s (backlog drain on a ~105k-document index, §4); the same command gives 2,810 tx/s on a 195k-document index (§4 note, §9) |
 | Debugging story | BUG-001 (library ack off-by-one); **BUG-002** (backfill race: 42 docs wrong → fixed with watermarks); **BUG-003** (the watermark algorithm assumed full row images; Postgres omits unchanged TOAST → 1 doc → 0) |

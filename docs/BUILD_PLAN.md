@@ -310,7 +310,7 @@ First reproduce the naive race, then fix it (D-008).
       slot retained WAL bytes
 - [x] T09.2 Prometheus + Grafana in compose (127.0.0.1 ports; check they're free first); dashboard
       provisioned from `docker/grafana/`
-- [ ] T09.3 Benchmarks: pgbench at fixed rates, stepping up until lag grows without bound; batch 1 vs 500;
+- [x] T09.3 Benchmarks: pgbench at fixed rates, stepping up until lag grows without bound; batch 1 vs 500;
       lanes 1 / 4 / 8 → RESULTS.md with machine, versions and exact commands
 - [ ] T09.4 Headline chaos run ([M] updates, SIGKILL every 30 s) → reconcile = 0 → RESULTS.md
 - [ ] T09.5 Verify (TEST_CHECKLIST → T09), `learn/task-09-observability.md`, checkpoint

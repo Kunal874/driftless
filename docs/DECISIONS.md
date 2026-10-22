@@ -32,6 +32,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-024 | Backfill progress in an unpublished table; resume beats request | Accepted | T07 |
 | D-025 | Backpressure by pausing the replication socket; safe status timer | Accepted | T08 |
 | D-026 | Cap slot WAL at 1 GB; refuse to start on a lost slot; recovery is manual | Accepted | T08 |
+| D-027 | Keep 8 lanes by default; 1 lane is the low-lag setting for Meilisearch | Accepted | T09 |
 
 ---
 
@@ -320,3 +321,17 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   `wal_status = lost` → Driftless refused with the steps → steps followed → 150,085 rows backfilled → 0 drift.
 - **Consequences:** an outage longer than ~1 GB of WAL costs a full backfill (105k rows: ~15–30 s here). Size the cap
   to the disk and the outage you want to survive.
+
+### D-027 — Keep 8 lanes by default; 1 lane is the low-lag setting for Meilisearch
+- **Context (T09.3):** lag at a steady 1000 tx/s, A-B-A on the same index: 1 lane p99 3.84 s → 8 lanes 4.99 s →
+  1 lane 3.78 s (4 lanes: 6.50 s). Meilisearch's task timestamps explain it: it indexes **one batch at a time per
+  index** (~1 s each here, mostly rebuilding its word dictionary) and merges every queued task into that batch. With
+  N lanes, each task waits ~1 s behind the batch in progress (0.88–1.07 s queued vs 0.02–0.04 s with 1 lane), so
+  extra lanes add waiting, not indexing parallelism.
+- **But for a backlog,** on the same 195k-document index: 8 lanes × 5000 drained 2,810 tx/s, 1 lane × 40000 2,132,
+  1 lane × 5000 1,700. Parallel requests still overlap the HTTP, JSON and task-polling work around each batch.
+- **Decision:** the default stays `DRIFTLESS_LANES=8`: draining a backlog (after downtime, a bulk load, a backfill) is
+  when speed matters, and steady lag differs by ~1–2 s. `DRIFTLESS_LANES=1` is the documented setting for the lowest
+  steady-state lag on Meilisearch. Correctness is the same either way (per-key order holds for any lane count).
+- **Revisit when:** a sink that really indexes writes in parallel (e.g. a Redis cache), or Meilisearch indexing
+  batches concurrently.

@@ -9,8 +9,10 @@ Updated 2026-10-23, during T09 (session 1). Overwrite this at every checkpoint: 
 - In progress: **T09 — Observability & benchmarks**. T09.1 ✅ (`src/metrics.ts`, `GET /metrics` on 9464).
   T09.2 ✅ (`docker compose --profile metrics up -d`: Prometheus 127.0.0.1:9090, Grafana 127.0.0.1:3000, 15-panel
   dashboard "Driftless" provisioned from `docker/grafana/`, anonymous view-only)
-- Next step: **T09.3**: lag benchmark at stepped fixed rates. First make the lag buckets finer between 1 and 10 s
-  (p99 at 200 tx/s showed as 4.95 s, i.e. just "somewhere in 2.5–5 s")
+  T09.3 ✅ (`scripts/bench-lag.ts`; RESULTS §8 lag at 200 → ~4,800 tx/s, §9 lanes trade-off → D-027)
+- Next step: **T09.4**: headline chaos run, `scripts/chaos.sh 1200 30 1000` (20 min at 1,000 tx/s, SIGKILL ~every
+  30 s) → reconcile 0 → RESULTS §1 + claims table. 1,000 tx/s is ~⅓ of today's drain capacity (2,810 tx/s), so
+  every kill hits plenty of in-flight work without the run falling behind
 
 ## What the system holds right now
 

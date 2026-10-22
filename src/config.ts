@@ -29,7 +29,8 @@ export const tables = [table, watermarkTable]; // everything the publication mus
 export const stateTable = 'public.driftless_state';
 
 // Pipeline tuning (T06): how many ordered lanes apply changes in parallel, and the most changes one
-// Meilisearch write may carry. Defaults from the T06.4 benchmarks (docs/RESULTS.md §4).
+// Meilisearch write may carry. Defaults from the T06.4 benchmarks (docs/RESULTS.md §4). 8 lanes drain a backlog
+// fastest; 1 lane gives the lowest steady lag on Meilisearch (D-027, RESULTS.md §9).
 export const lanes = Number(process.env.DRIFTLESS_LANES ?? 8);
 export const batchMax = Number(process.env.DRIFTLESS_BATCH_MAX ?? 5000);
 if (!(Number.isInteger(lanes) && lanes >= 1 && Number.isInteger(batchMax) && batchMax >= 1)) {

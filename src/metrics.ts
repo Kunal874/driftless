@@ -12,7 +12,9 @@ collectDefaultMetrics({ register: registry, prefix: 'driftless_' }); // memory, 
 export const lag = new Histogram({
   name: 'driftless_lag_seconds',
   help: 'Commit in Postgres until applied in Meilisearch and confirmable',
-  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600],
+  // Fine between 0.5 and 10 s, where lag actually lives on this setup (T09.3), so p99 is more than "2.5–5 s".
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 5, 6, 8, 10, 15,
+    30, 60, 120, 300, 600],
   registers: [registry],
 });
 
@@ -28,7 +30,7 @@ export const changesApplied = new Counter({
 export const writeSeconds = new Histogram({
   name: 'driftless_write_seconds',
   help: 'One lane write, until Meilisearch reports it succeeded',
-  buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+  buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 10, 30, 60],
   registers: [registry],
 });
 
