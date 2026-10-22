@@ -18,7 +18,10 @@ Updated 2026-10-22, end of T04 (session 1). Overwrite this at every checkpoint: 
     itself → Docker restarts it; `docker kill` → stays down (a manual stop), so chaos restarts it explicitly.
     **It may be running now.** Before running `node src/main.ts` on the host, `docker compose stop connector`
     (only one connection may use the slot).
-- Next step: **T05.4**: `scripts/chaos.sh`
+  - T05.4 done: `scripts/chaos.sh [DURATION=600] [KILL_EVERY=30] [RATE=5]`: workload + SIGKILL at random gaps
+    (0.5–1.5 × KILL_EVERY) + explicit restart, then `reconcile --timeout=1800`; exits with reconcile's code.
+    Smoke run (60 s, ~10 s, 5 tx/s): 4 kills, 268 tx, 0 failed → 100,005 = 100,005, **0 drift**.
+- Next step: **T05.5**: the real chaos runs → `docs/RESULTS.md` (+ a `docs/bugs/` note for anything found)
 
 ## What the system holds right now
 
