@@ -41,6 +41,30 @@ services:
       timeout: 3s
       retries: 30
 
+  connector:
+    # Driftless itself, for chaos tests and long runs. Starts only when asked for, so it never competes
+    # with `node src/main.ts` on the host for the replication slot:  docker compose up -d connector
+    profiles: ["connector"]
+    image: node:24.18.0-alpine
+    working_dir: /app
+    command: ["node", "src/main.ts"] # no build step: Node strips the TypeScript types itself
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      MEILI_HOST: http://meilisearch:7700
+    volumes:
+      # The repo, read-only. node_modules comes from the host: every runtime dependency is plain
+      # JavaScript, so a Windows install runs fine on Linux.
+      - ./:/app:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    # The supervisor half of fail-stop (D-009): whenever Driftless exits (crash, kill, fatal error),
+    # Docker starts it again; it resumes from the slot's confirmed position.
+    restart: unless-stopped
+
 volumes:
   pgdata:
   meilidata:

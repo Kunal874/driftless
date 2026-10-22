@@ -13,7 +13,12 @@ Updated 2026-10-22, end of T04 (session 1). Overwrite this at every checkpoint: 
   running?"). `--self-test` mode is in the same file.
   - T05.2 done: `node scripts/reconcile.ts --self-test` (connector running) planted mismatch #1, missing #3
     and an extra doc → found exactly 1/1/1 → restored → drift 0 → **PASSED**.
-- Next step: **T05.3**: `connector` service in docker-compose.yml (so chaos can SIGKILL it)
+  - T05.3 done: compose service `connector` (`node:24.18.0-alpine`, repo mounted read-only, profile
+    `connector`, `restart: unless-stopped`). Verified: streams and applies (68 ms) inside Docker; exiting by
+    itself → Docker restarts it; `docker kill` → stays down (a manual stop), so chaos restarts it explicitly.
+    **It may be running now.** Before running `node src/main.ts` on the host, `docker compose stop connector`
+    (only one connection may use the slot).
+- Next step: **T05.4**: `scripts/chaos.sh`
 
 ## What the system holds right now
 

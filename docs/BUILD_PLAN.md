@@ -197,8 +197,10 @@ after Meilisearch reports the write `succeeded`.
       Print missing / extra / mismatched counts with sample ids; exit 1 on any drift.
 - [x] T05.2 Reconcile self-test: corrupt one document, delete one, add one extra → expect
       1 mismatched / 1 missing / 1 extra
-- [ ] T05.3 Compose service `connector` (`node:24` image, repo mounted, `depends_on` healthy) so tests can
-      `docker compose kill -s SIGKILL connector`
+- [x] T05.3 Compose service `connector` (`node:24` image, repo mounted, `depends_on` healthy) so tests can
+      `docker compose kill -s SIGKILL connector`. Profile `connector` (start: `docker compose up -d connector`);
+      `restart: unless-stopped` restarts it after it exits **on its own**. A `docker kill` counts as a manual
+      stop and is **not** restarted, so chaos.sh restarts it explicitly.
 - [ ] T05.4 `scripts/chaos.sh DURATION KILL_EVERY RATE`: run the workload, SIGKILL + restart the
       connector every KILL_EVERY seconds, stop the workload, run reconcile
 - [ ] T05.5 First full chaos run. For every bug found: `docs/bugs/` note → fix → re-run until 0 drift.

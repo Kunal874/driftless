@@ -51,7 +51,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 
 | Component | Job | Planned location | Task | Status |
 |---|---|---|---|---|
-| Dev stack | Postgres (logical WAL) + Meilisearch, local only | `docker-compose.yml` | T01 | ✅ |
+| Dev stack | Postgres (logical WAL) + Meilisearch, local only; `connector` service (profile) since T05 | `docker-compose.yml` | T01, T05 | ✅ |
 | Demo source data | `products` schema, seed, random write workload | `db/`, `scripts/workload.sh` | T02 | ✅ |
 | Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | ✅ |
 | Stream + decoder | pgoutput messages → `Transaction`s of `Change`s | `src/source/decode.ts`, `src/main.ts` | T03 | ✅ |
