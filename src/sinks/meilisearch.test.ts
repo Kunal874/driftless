@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { MeilisearchApiError, MeilisearchRequestError, type EnqueuedTaskPromise } from 'meilisearch';
 import type { Change } from '../source/decode.ts';
-import { planSteps } from './meilisearch.ts';
+import { backoffMs, planSteps, submit } from './meilisearch.ts';
 
 const table = 'public.products';
 const upsert = (pk: string, row: Record<string, unknown>): Change => ({ op: 'update', table, pk, row: { id: pk, ...row } });
@@ -44,5 +45,67 @@ describe('planSteps', () => {
 
   it('refuses changes for a table it does not mirror', () => {
     expect(() => planSteps([{ op: 'delete', table: 'public.orders', pk: '1' }], table)).toThrow(/doesn't mirror/);
+  });
+});
+
+// A fake write: each call returns the next scripted outcome (a task status, or an error from waitTask).
+function scripted(...outcomes: Array<'succeeded' | 'failed' | Error>) {
+  const write = () => {
+    write.calls++;
+    const outcome = outcomes.shift() ?? 'succeeded';
+    const waitTask = async () => {
+      if (outcome instanceof Error) throw outcome;
+      return { status: outcome, error: outcome === 'failed' ? { message: 'invalid document' } : null };
+    };
+    return Object.assign(Promise.resolve({}), { waitTask }) as unknown as EnqueuedTaskPromise;
+  };
+  write.calls = 0;
+  return write;
+}
+
+const fast = { backoff: () => 0, log: () => {} };
+const unreachable = () => new MeilisearchRequestError('http://127.0.0.1:7700/tasks/1', new Error('ECONNREFUSED'));
+const httpError = (status: number) => new MeilisearchApiError(new Response(null, { status }));
+
+describe('submit (retry policy, D-021)', () => {
+  it('returns once the task has succeeded', async () => {
+    const write = scripted('succeeded');
+    await submit(write, 'id 1', fast);
+    expect(write.calls).toBe(1);
+  });
+
+  it('keeps retrying while Meilisearch is unreachable or overloaded', async () => {
+    const logged: string[] = [];
+    const write = scripted(unreachable(), httpError(503), httpError(429), unreachable(), 'succeeded');
+    await submit(write, 'id 1', { ...fast, log: (m) => logged.push(m) });
+    expect(write.calls).toBe(5);
+    expect(logged).toHaveLength(4);
+    expect(logged[0]).toMatch(/unavailable.*\[id 1\]; attempt 1/);
+  });
+
+  it('gives a rejected write a few tries, then stops naming the rows', async () => {
+    const write = scripted('failed', 'failed', 'failed', 'succeeded');
+    await expect(submit(write, 'xid 7: upsert id 10', fast)).rejects.toThrow(/xid 7: upsert id 10: Meilisearch rejected.*invalid document/);
+    expect(write.calls).toBe(3);
+  });
+
+  it('accepts a write that was rejected once and then succeeded', async () => {
+    const write = scripted('failed', 'succeeded');
+    await submit(write, 'id 1', fast);
+    expect(write.calls).toBe(2);
+  });
+
+  it('does not retry client errors (HTTP 4xx): they would fail again', async () => {
+    const write = scripted(httpError(400));
+    await expect(submit(write, 'id 1', fast)).rejects.toBeInstanceOf(MeilisearchApiError);
+    expect(write.calls).toBe(1);
+  });
+
+  it('backs off with full jitter, capped at 30 s', () => {
+    for (let attempt = 1; attempt <= 20; attempt++) {
+      const delay = backoffMs(attempt);
+      expect(delay).toBeGreaterThanOrEqual(0);
+      expect(delay).toBeLessThan(Math.min(30_000, 100 * 2 ** attempt));
+    }
   });
 });

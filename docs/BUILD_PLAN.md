@@ -168,7 +168,7 @@ after Meilisearch reports the write `succeeded`.
       maps row → document; it's the single source of truth, reused by reconcile in T05.
 - [x] T04.2 `src/sinks/meilisearch.ts`: insert/update → `updateDocuments` (merge: keeps fields we didn't
       receive); delete → `deleteDocuments([id])`. Omit unchanged-TOAST columns; never write them as null.
-- [ ] T04.3 Ack after apply: wait for each task to be `succeeded` before acking that transaction's commit
+- [x] T04.3 Ack after apply: wait for each task to be `succeeded` before acking that transaction's commit
       LSN (simple in-order checkpointer, one lane). Failures → retry with exponential backoff + jitter;
       still failing after N attempts → stop with an error naming the row (D-009).
 - [ ] T04.4 Crash check: a debug knob that pauses between "task succeeded" and "ack"; SIGKILL during it

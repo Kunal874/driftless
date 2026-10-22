@@ -1,4 +1,13 @@
-import { MeilisearchApiError, type EnqueuedTaskPromise, type Index, type Meilisearch } from 'meilisearch';
+import { setTimeout as sleep } from 'node:timers/promises';
+import {
+  MeilisearchApiError,
+  MeilisearchRequestError,
+  MeilisearchRequestTimeOutError,
+  MeilisearchTaskTimeOutError,
+  type EnqueuedTaskPromise,
+  type Index,
+  type Meilisearch,
+} from 'meilisearch';
 import type { Change, Transaction } from '../source/decode.ts';
 import { toDocument, type Document } from './document.ts';
 
@@ -57,15 +66,15 @@ export function meilisearchSink(index: Index, table: string) {
     async apply(txn: Transaction): Promise<void> {
       for (const step of planSteps(txn.changes, table)) {
         if (step.kind === 'clear') {
-          await succeeded(index.deleteAllDocuments(), `xid ${txn.xid}: clear index (TRUNCATE)`);
+          await submit(() => index.deleteAllDocuments(), `xid ${txn.xid}: clear index (TRUNCATE)`);
         } else if (step.kind === 'delete') {
           const ids = [...step.ids];
-          await succeeded(index.deleteDocuments(ids), `xid ${txn.xid}: delete ${idList(ids)}`);
+          await submit(() => index.deleteDocuments(ids), `xid ${txn.xid}: delete ${idList(ids)}`);
         } else {
           const docs = [...step.docs.values()];
           for (let i = 0; i < docs.length; i += MAX_DOCS_PER_WRITE) {
             const chunk = docs.slice(i, i + MAX_DOCS_PER_WRITE);
-            await succeeded(index.updateDocuments(chunk), `xid ${txn.xid}: upsert ${idList(chunk.map((d) => String(d.id)))}`);
+            await submit(() => index.updateDocuments(chunk), `xid ${txn.xid}: upsert ${idList(chunk.map((d) => String(d.id)))}`);
           }
         }
       }
@@ -73,8 +82,45 @@ export function meilisearchSink(index: Index, table: string) {
   };
 }
 
+// Exponential backoff with "full jitter": wait a random time between 0 and min(30 s, 100 ms × 2^attempt).
+// The randomness keeps retrying clients from hitting a recovering server in lock-step.
+export const backoffMs = (attempt: number): number => Math.random() * Math.min(30_000, 100 * 2 ** attempt);
+
+type RetryOptions = { maxRejections?: number; backoff?: (attempt: number) => number; log?: (message: string) => void };
+
+// Runs one write until Meilisearch has really applied it (D-021):
+// - Meilisearch unreachable or overloaded (network error, timeout, HTTP 5xx/429): retry with backoff, for as
+//   long as it takes. Nothing is confirmed meanwhile, so lag grows visibly and nothing is lost.
+// - Meilisearch rejected the write (task failed, HTTP 4xx): try `maxRejections` times in case it was a fluke,
+//   then throw. Fail-stop (D-009): stopping is visible and loses nothing; skipping would drift silently.
+// Re-sending after an error is safe: writes are idempotent, and Meilisearch applies tasks in order.
+export async function submit(write: () => EnqueuedTaskPromise, what: string, options: RetryOptions = {}): Promise<void> {
+  const { maxRejections = 3, backoff = backoffMs, log = console.warn } = options;
+  let rejections = 0;
+  for (let attempt = 1; ; attempt++) {
+    let problem: string;
+    try {
+      const task = await write().waitTask({ timeout: TASK_WAIT_MS });
+      if (task.status === 'succeeded') return;
+      problem = `rejected the write (task ${task.status}): ${task.error?.message ?? 'no reason given'}`;
+      if (++rejections >= maxRejections) throw new Error(`${what}: Meilisearch ${problem}`);
+    } catch (err) {
+      if (!isTransient(err)) throw err;
+      problem = `is unavailable: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    const delay = Math.round(backoff(attempt));
+    log(`meilisearch ${problem} [${what}]; attempt ${attempt}, retrying in ${delay} ms`);
+    await sleep(delay);
+  }
+}
+
+function isTransient(err: unknown): boolean {
+  if (err instanceof MeilisearchApiError) return err.response.status >= 500 || err.response.status === 429;
+  return err instanceof MeilisearchRequestError || err instanceof MeilisearchRequestTimeOutError || err instanceof MeilisearchTaskTimeOutError;
+}
+
 // Meilisearch answers a write with "202 Accepted" (queued) and applies it later as a task. A write only
-// counts once its task reports `succeeded`.
+// counts once its task reports `succeeded`. Used at startup, where failing fast is fine.
 async function succeeded(write: EnqueuedTaskPromise, what: string): Promise<void> {
   const task = await write.waitTask({ timeout: TASK_WAIT_MS });
   if (task.status !== 'succeeded') throw new Error(`${what}: task ${task.status}: ${task.error?.message}`);

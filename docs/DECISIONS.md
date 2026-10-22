@@ -26,6 +26,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-018 | TRUNCATE is streamed and handled, not filtered out | Accepted | T03 |
 | D-019 | The confirm protocol: exact end positions, idle confirms, own queue | Accepted | T03 |
 | D-020 | Document shape: exact string ids, ISO dates, partial docs merged | Accepted | T04 |
+| D-021 | Retry policy: wait out unavailability, fail-stop on rejection | Accepted | T04 |
 
 ---
 
@@ -214,3 +215,16 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   partial row would wipe the description).
 - **Consequences:** range filters on `id` would need a numeric copy of the field; reconcile compares by
   fetching documents by id instead.
+
+### D-021 — Retry policy: wait out unavailability, fail-stop on rejection
+- **Decision:** (`submit()` in `src/sinks/meilisearch.ts`; refines D-009)
+  - *Meilisearch unavailable* (network error, request or task-wait timeout, HTTP 5xx, HTTP 429): retry
+    **without limit**, using exponential backoff with full jitter (random 0 … min(30 s, 100 ms × 2^attempt)).
+  - *Meilisearch rejected the write* (task `failed`): try 3 times in total, then stop with an error naming
+    the transaction and ids. HTTP 4xx stops immediately.
+- **Why:** an outage is temporary, and waiting loses nothing: nothing is confirmed, so Postgres keeps the WAL
+  and lag shows the problem. A rejection is usually deterministic (a bad document), so retrying forever
+  would hang silently. Jitter keeps retries from arriving in synchronized waves when the server comes back.
+- **Consequences:** a long outage means a long wait with WAL piling up behind the slot (bounded by T08's
+  WAL safety). Re-sending a write after an error can apply it twice, which is harmless: writes are
+  idempotent, and Meilisearch processes tasks in the order they were enqueued.

@@ -16,8 +16,10 @@ Updated 2026-10-22, end of T03 (session 1). Overwrite this at every checkpoint: 
   11 sampled ids match exactly (incl. #10 keeping its 2,560-char description after a price-only update).
   **Measured baseline:** ~100 ms per transaction (one Meilisearch task each) → ~10 txn/s max with one lane.
   That's the reason for T06 batching across transactions.
-- Next step: **T04.3**: retry policy (unavailable → retry forever with jittered backoff; rejected → 3 tries,
-  then fail-stop) + unit tests
+- T04.3 done: `submit()` retry policy (D-021): unavailable → retry forever with full-jitter backoff (≤ 30 s);
+  task failed → 3 tries then fail-stop naming xid + ids; HTTP 4xx → stop at once. 6 unit tests; `npm test` 21/21.
+- Next step: **T04.4**: live checks: Meilisearch stopped mid-writes (retries, then catches up), and a kill
+  between "succeeded" and "ack" (`DRIFTLESS_DEBUG_ACK_DELAY_MS`) → replay → index still correct
 
 ## What the system holds right now
 
