@@ -53,7 +53,7 @@ services:
       PGPORT: "5432"
       MEILI_HOST: http://meilisearch:7700
       DRIFTLESS_LANES: ${DRIFTLESS_LANES:-8} # override per run, e.g. DRIFTLESS_LANES=1 docker compose up -d connector
-      DRIFTLESS_BATCH_MAX: ${DRIFTLESS_BATCH_MAX:-500}
+      DRIFTLESS_BATCH_MAX: ${DRIFTLESS_BATCH_MAX:-5000}
     volumes:
       # The repo, read-only. node_modules comes from the host: every runtime dependency is plain
       # JavaScript, so a Windows install runs fine on Linux.

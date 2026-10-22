@@ -234,8 +234,9 @@ the wiring, so every commit stays runnable.
       upsert, so a batch's upserts and deletes touch disjoint keys → at most 2 writes, sent in parallel);
       `clear()` for TRUNCATE. Main: dispatch transactions into lanes without waiting; TRUNCATE is a barrier
       (D-018); the idle check counts in-flight transactions; periodic stats line; knobs `DRIFTLESS_LANES`
-      (default 8), `DRIFTLESS_BATCH_MAX` (default 500), `DRIFTLESS_LOG_TXNS`.
-- [ ] T06.4 Benchmark: backlog drain (the same backlog, unbatched vs lanes 1 vs lanes 8) → RESULTS.md. Chaos +
+      (default 8), `DRIFTLESS_BATCH_MAX` (default 500, raised to 5000 by T06.4's measurements),
+      `DRIFTLESS_LOG_TXNS`.
+- [x] T06.4 Benchmark: backlog drain (the same backlog, unbatched vs lanes 1 vs lanes 8) → RESULTS.md. Chaos +
       reconcile at 200 tx/s with lanes = 8, batch = 500 → 0 drift
 - [ ] T06.5 Verify (TEST_CHECKLIST → T06), `learn/task-06-lanes-and-batching.md`, checkpoint
 

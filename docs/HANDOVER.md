@@ -19,8 +19,11 @@ Updated 2026-10-22, end of T05 (session 1). Overwrite this at every checkpoint: 
   (500), `DRIFTLESS_LOG_TXNS`; compose passes the first two through. A stats line every 5 s.
   Live: re-seed through 8 lanes → 0 drift; **200 tx/s for 30 s kept up** (caught up 13 ms after the load
   ended, ~5 changes/write) → 0 drift. `npm test` 33/33.
-- Next step: **T06.4**: `scripts/bench-drain.sh` (written, uncommitted) for unbatched vs lanes 1 vs lanes 8
-  (+ batchMax variants: bulk loads looked slower with batches of 500); chaos at 200 tx/s
+  T06.4 done: `scripts/bench-drain.sh` → unbatched **9 tx/s** vs 8 lanes × 5000 **6,752 tx/s**; bulk 100k
+  re-seed 3.2 s (5000) vs 6.9 s (500), so the default `batchMax` is now **5000**. Chaos at 200 tx/s:
+  `chaos.sh 600 30 200` (20 kills, 119,764 tx) and `chaos.sh 180 5 200` (30 kills, 35,759 tx) → both
+  **0 drift**. All in `docs/RESULTS.md` §1 and §4.
+- Next step: **T06.5**: checklist, `learn/task-06-lanes-and-batching.md` (draft written; results to fill), checkpoint
 
 ## What the system holds right now
 

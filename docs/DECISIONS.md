@@ -233,7 +233,9 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 ### D-022 — Natural batching + per-key coalescing across transactions
 - **Decision:** (`src/pipeline/lanes.ts`, `coalesce()` in `src/sinks/meilisearch.ts`, refines D-007)
   - A lane has **no flush timer**. When its write finishes, it sends whatever queued up meanwhile, up to
-    `batchMax` (default 500).
+    `batchMax`. The defaults, 8 lanes and `batchMax` 5000, were chosen by measurement (RESULTS.md §4):
+    8 × 5000 drained a backlog fastest (6,752 tx/s vs 4,910 with 500) and halved a 100k-row bulk load
+    (3.2 s vs 6.9 s). Under normal load batches stay small anyway, so the cap only matters for bulk.
   - A batch may mix changes from many transactions. It is reduced to its net effect per key: one delete,
     or one upsert with fields merged in order. Upserts and deletes then touch different keys, so they're sent
     as at most two writes, in parallel.

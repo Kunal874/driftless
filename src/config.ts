@@ -23,9 +23,9 @@ export const index = { uid: 'products', primaryKey: 'id' };
 export const tables = [table];
 
 // Pipeline tuning (T06): how many ordered lanes apply changes in parallel, and the most changes one
-// Meilisearch write may carry.
+// Meilisearch write may carry. Defaults from the T06.4 benchmarks (docs/RESULTS.md §4).
 export const lanes = Number(process.env.DRIFTLESS_LANES ?? 8);
-export const batchMax = Number(process.env.DRIFTLESS_BATCH_MAX ?? 500);
+export const batchMax = Number(process.env.DRIFTLESS_BATCH_MAX ?? 5000);
 if (!(Number.isInteger(lanes) && lanes >= 1 && Number.isInteger(batchMax) && batchMax >= 1)) {
   throw new Error(`DRIFTLESS_LANES and DRIFTLESS_BATCH_MAX must be whole numbers ≥ 1 (got ${lanes}, ${batchMax})`);
 }
