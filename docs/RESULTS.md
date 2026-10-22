@@ -91,6 +91,34 @@ throughput on this machine (lower bound: start-up time is included).
 **Steady load:** at 200 tx/s for 30 s (5,805 transactions), Driftless kept up throughout: caught up 13 ms after
 the load stopped, ~5 changes per write, 60–100 transactions in flight. 0 drift.
 
+## 5. Backfill under load (T07)
+
+**Command:** `scripts/backfill-race.sh DELAY_MS RATE SECONDS [KILL_EVERY_S]`. It empties the index and its backfill
+progress, starts Driftless with backfill on, writes with the standard workload meanwhile, then reconciles every row.
+`DELAY_MS` holds each chunk's read→write window open longer, to make races likely.
+
+| Date | Version | Command | Backfilled | Concurrent tx | Result |
+|---|---|---|---|---|---|
+| 2026-10-22 | naive (`9852dce`) | `backfill-race.sh 0 0` (no load) | 102,327 rows / 73 s | 0 | 0 drift |
+| 2026-10-22 | naive | `backfill-race.sh 300 200 150` | 104,516 | 29,885 | **DRIFT 42** (40 older values, 2 resurrected): BUG-002 |
+| 2026-10-22 | naive | `backfill-race.sh 0 200 100` | 104,250 | 19,845 | 0 drift (window ms-wide; see BUG-002) |
+| 2026-10-22 | watermarks, keys only | `backfill-race.sh 300 200 150` | 105,288 (47 dropped) | 29,549 | **DRIFT 1** (missing description): BUG-003 |
+| 2026-10-22 | watermarks, column-aware | `backfill-race.sh 300 200 150` | 105,867 (42 dropped, 1 filled) | 30,171 | 0 drift |
+| 2026-10-22 | + saved progress | `backfill-race.sh 300 200 150 20` (6 SIGKILLs) | resumed 6×, 105,175 total | 30,055 | 0 drift |
+| 2026-10-23 | final | `DRIFTLESS_BACKFILL_CHUNK=1000 backfill-race.sh 300 200 150` × **10** | 107,308–114,808 per run | ~30,000 per run | **0 drift in 10 / 10** |
+
+The 10 final runs used 1,000-row chunks on purpose (≈105 race windows per run instead of ≈11). Across them,
+**420** snapshot rows were dropped because the stream had a newer value (the naive version would have written each
+back), and **9** were only filled in (each would have been a BUG-003 document missing its description).
+
+**Chunk size** (no load, no delay, 105,175 rows): each chunk costs roughly the same fixed overhead, so bigger is faster.
+
+| `DRIFTLESS_BACKFILL_CHUNK` | Time | Rate |
+|---|---|---|
+| 1,000 | 104.5 s | ~1,000 rows/s |
+| 5,000 | 22.8 s | ~4,600 rows/s |
+| 10,000 (new default) | 14.1 s | ~7,400 rows/s |
+
 ---
 
 ## Resume claims: status
@@ -100,4 +128,4 @@ the load stopped, ~5 changes per write, 60–100 transactions in flight. 0 drift
 | 0 mismatched documents out of [N] after [M] updates/deletes while SIGKILLed every [30 s] | **measured at 200 tx/s**: 0 drift over 101,729 rows after 119,764 transactions and 20 SIGKILLs (T06); T09 repeats it as the headline run |
 | End-to-end lag p99 < [X] ms at [N] writes/s | not measured yet (T09) |
 | Lanes + batching raised throughput from [A] to [B] | **measured**: 9 → 6,752 transactions/s (backlog drain, §4) |
-| Debugging story | BUG-001 (library ack off-by-one), reproduced and fixed |
+| Debugging story | BUG-001 (library ack off-by-one); **BUG-002** (backfill race: 42 docs wrong → fixed with watermarks); **BUG-003** (the watermark algorithm assumed full row images; Postgres omits unchanged TOAST → 1 doc → 0) |

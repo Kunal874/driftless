@@ -25,7 +25,10 @@ Updated 2026-10-22, end of T06 (session 1). Overwrite this at every checkpoint: 
   `backfill-race.sh` now resets the state when it empties the index and takes a 4th arg KILL_EVERY_S. Live:
   `backfill-race.sh 300 200 150 20` → 6 SIGKILLs, each restart resumed after the last applied id → **0 drift**.
   `npm test` 42/42.
-- Next step: **T07.5**: chunk-size timing (1000 vs 5000) and 10 proof runs of `backfill-race.sh 300 200 150`
+  T07.5 done: chunk size 1,000 / 5,000 / 10,000 → 104 / 23 / 14 s for 105k rows, so the default is now **10,000**
+  (config + compose). 10 proof runs (`DRIFTLESS_BACKFILL_CHUNK=1000 backfill-race.sh 300 200 150`) → **10/10 at 0
+  drift**; 420 rows dropped and 9 filled in across them. All in `docs/RESULTS.md` §5.
+- Next step: **T07.6**: checklist, learn file (draft written; results to fill), checkpoint
 
 ## What the system holds right now
 

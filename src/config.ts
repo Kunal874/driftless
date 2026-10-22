@@ -42,7 +42,9 @@ export const backfill = {
   // when the index is empty but the table isn't. To force a fresh one: delete the 'backfill' row from
   // driftless_state and start with this set.
   enabled: process.env.DRIFTLESS_BACKFILL === '1',
-  chunk: Number(process.env.DRIFTLESS_BACKFILL_CHUNK ?? 1000), // rows read per chunk
+  // Rows read per chunk. Each chunk costs about the same fixed overhead (two marks + ~1 write per lane), so
+  // bigger is faster: 105k rows took 104 s with 1,000, 23 s with 5,000, 14 s with 10,000 (RESULTS.md §5).
+  chunk: Number(process.env.DRIFTLESS_BACKFILL_CHUNK ?? 10_000),
   // Race-test knob: wait this long between reading a chunk and writing it (T07.2).
   debugDelayMs: Number(process.env.DRIFTLESS_BACKFILL_DEBUG_DELAY_MS ?? 0),
 };

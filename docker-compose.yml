@@ -55,6 +55,7 @@ services:
       DRIFTLESS_LANES: ${DRIFTLESS_LANES:-8} # override per run, e.g. DRIFTLESS_LANES=1 docker compose up -d connector
       DRIFTLESS_BATCH_MAX: ${DRIFTLESS_BATCH_MAX:-5000}
       DRIFTLESS_BACKFILL: ${DRIFTLESS_BACKFILL:-} # 1 = backfill existing rows on start (T07)
+      DRIFTLESS_BACKFILL_CHUNK: ${DRIFTLESS_BACKFILL_CHUNK:-10000}
       DRIFTLESS_BACKFILL_DEBUG_DELAY_MS: ${DRIFTLESS_BACKFILL_DEBUG_DELAY_MS:-0}
     volumes:
       # The repo, read-only. node_modules comes from the host: every runtime dependency is plain

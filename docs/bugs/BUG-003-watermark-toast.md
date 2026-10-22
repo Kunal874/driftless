@@ -63,7 +63,10 @@ the keys-only version.
 
 ## Proof
 
-Same command, `scripts/backfill-race.sh 300 200 150`, after the fix: see T07.5 and `docs/RESULTS.md`.
+Same command, `scripts/backfill-race.sh 300 200 150`, after the fix: 0 drift, with the log saying
+"42 snapshot rows dropped and **1 only filled in**". Then 10 more runs, all at 0 drift, with **9** rows filled
+in across them. Each of those 9 would have been a document missing its description under the keys-only version.
+Details: `docs/RESULTS.md` §5.
 
 ## The interview version
 

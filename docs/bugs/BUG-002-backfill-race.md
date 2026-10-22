@@ -75,8 +75,10 @@ the read:
 
 ## Proof
 
-T07.5: the same command with the fix, `backfill-race.sh 300 200 150`, repeated 10 times. (Results go here and
-in `docs/RESULTS.md`.)
+With the fix (after BUG-003 was also fixed), the same command, `backfill-race.sh 300 200 150` with 1,000-row
+chunks, passed **10 times out of 10** at 0 drift. Across those runs 420 snapshot rows were dropped because the
+stream already had a newer value; the naive backfill would have written every one of them back. Also passed with
+6 SIGKILLs during a backfill. Details: `docs/RESULTS.md` §5.
 
 ## The interview version
 
