@@ -171,7 +171,7 @@ after Meilisearch reports the write `succeeded`.
 - [x] T04.3 Ack after apply: wait for each task to be `succeeded` before acking that transaction's commit
       LSN (simple in-order checkpointer, one lane). Failures → retry with exponential backoff + jitter;
       still failing after N attempts → stop with an error naming the row (D-009).
-- [ ] T04.4 Crash check: a debug knob that pauses between "task succeeded" and "ack"; SIGKILL during it
+- [x] T04.4 Crash check: a debug knob that pauses between "task succeeded" and "ack"; SIGKILL during it
       → restart → replayed → index still correct
 - [ ] T04.5 Verify (TEST_CHECKLIST → T04), `learn/task-04-meilisearch-sink.md`, checkpoint
 

@@ -18,8 +18,12 @@ Updated 2026-10-22, end of T03 (session 1). Overwrite this at every checkpoint: 
   That's the reason for T06 batching across transactions.
 - T04.3 done: `submit()` retry policy (D-021): unavailable → retry forever with full-jitter backoff (≤ 30 s);
   task failed → 3 tries then fail-stop naming xid + ids; HTTP 4xx → stop at once. 6 unit tests; `npm test` 21/21.
-- Next step: **T04.4**: live checks: Meilisearch stopped mid-writes (retries, then catches up), and a kill
-  between "succeeded" and "ack" (`DRIFTLESS_DEBUG_ACK_DELAY_MS`) → replay → index still correct
+- T04.4 done (verification only; the knob is `DRIFTLESS_DEBUG_ACK_DELAY_MS`, after apply, before confirm):
+  - Outage: `docker compose stop meilisearch`, 3 writes → slot unchanged for 10 s, 7 jittered retries
+    logged; Meilisearch back → all 3 applied within ~5 s; docs match, 100,000 = 100,000.
+  - Killed after apply, before ack (`stock = stock + 1` on #30) → slot unchanged; restart replays txn 6888 →
+    doc #30 stock 93 = Postgres (re-applying the value, not the +1, is why replay is harmless).
+- Next step: **T04.5**: checklist, `learn/task-04-meilisearch-sink.md`, checkpoint
 
 ## What the system holds right now
 
