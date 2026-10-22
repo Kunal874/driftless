@@ -21,7 +21,11 @@ Updated 2026-10-22, end of T04 (session 1). Overwrite this at every checkpoint: 
   - T05.4 done: `scripts/chaos.sh [DURATION=600] [KILL_EVERY=30] [RATE=5]`: workload + SIGKILL at random gaps
     (0.5–1.5 × KILL_EVERY) + explicit restart, then `reconcile --timeout=1800`; exits with reconcile's code.
     Smoke run (60 s, ~10 s, 5 tx/s): 4 kills, 268 tx, 0 failed → 100,005 = 100,005, **0 drift**.
-- Next step: **T05.5**: the real chaos runs → `docs/RESULTS.md` (+ a `docs/bugs/` note for anything found)
+  - T05.5 done: `chaos.sh 600 30 5` (17 kills, 2,995 tx) and `chaos.sh 180 5 5` (27 kills, 899 tx) → both
+    **0 drift**. 51 connector starts, 0 fatal errors; 31 transactions killed before their ack were replayed and
+    absorbed. No new bug found. Recorded in the new `docs/RESULTS.md`.
+- Next step: **T05.6**: checklist, `learn/task-05-correctness-harness.md` (draft written, results section to
+  fill), checkpoint
 
 ## What the system holds right now
 

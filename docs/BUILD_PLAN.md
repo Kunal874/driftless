@@ -203,7 +203,7 @@ after Meilisearch reports the write `succeeded`.
       stop and is **not** restarted, so chaos.sh restarts it explicitly.
 - [x] T05.4 `scripts/chaos.sh DURATION KILL_EVERY RATE`: run the workload, SIGKILL + restart the
       connector every KILL_EVERY seconds, stop the workload, run reconcile
-- [ ] T05.5 First full chaos run. For every bug found: `docs/bugs/` note → fix → re-run until 0 drift.
+- [x] T05.5 First full chaos run. For every bug found: `docs/bugs/` note → fix → re-run until 0 drift.
       Create `docs/RESULTS.md` with the run.
 - [ ] T05.6 Verify (TEST_CHECKLIST → T05), `learn/task-05-correctness-harness.md`, checkpoint
 
