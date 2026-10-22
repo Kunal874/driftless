@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T05 — Correctness harness** (tag `checkpoint/T05`) |
-| Next step | **T06.1**: router + ordered lanes (docs/BUILD_PLAN.md → T06) |
+| Last checkpoint | **T06 — Ordered lanes, batching, checkpointer** (tag `checkpoint/T06`) |
+| Next step | **T07.1**: naive backfill (docs/BUILD_PLAN.md → T07) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

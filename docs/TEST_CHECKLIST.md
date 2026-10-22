@@ -81,13 +81,16 @@ Handy commands:
       99,987 = 99,987); harsh run, a kill every ~5 s for 3 min → 0 drift (27 kills); 31 replays absorbed
 - [x] Every bug found has a `docs/bugs/` note (none new in T05); RESULTS.md records the runs
 
-## T06 — Ordered lanes, batching, checkpointer
+## T06 — Ordered lanes, batching, checkpointer ✅ (verified 2026-10-22)
 
-- [ ] Unit: same-key events across batches apply in order; delete + re-insert inside one batch → correct final doc
-- [ ] Unit: checkpointer acks only the contiguous prefix of completed transactions (out-of-order
-      completion, a transaction spanning several lanes)
-- [ ] Chaos + reconcile = 0 drift with lanes = 8, batch = 500
-- [ ] Throughput lanes = 1 vs lanes = 8 recorded in RESULTS.md
+- [x] Unit: same-key events across batches apply in order; delete + re-insert inside one batch → correct final
+      doc (`lanes.test.ts`, `coalesce` tests in `meilisearch.test.ts`)
+- [x] Unit: checkpointer acks only the contiguous prefix of completed transactions (out-of-order
+      completion, a transaction spanning several lanes, empty transactions; `checkpointer.test.ts`)
+- [x] Chaos + reconcile = 0 drift with lanes = 8 (batch ≤ 5000, the measured default) at **200 tx/s**:
+      20 kills / 119,764 tx and 30 kills / 35,759 tx
+- [x] Throughput lanes = 1 vs lanes = 8 recorded in RESULTS.md (§4: 1,613 vs 4,910 tx/s at ≤ 500;
+      4,682 vs 6,752 tx/s at ≤ 5000; unbatched 9 tx/s)
 
 ## T07 — Backfill
 

@@ -5,10 +5,7 @@ Each step lists **where it can break**. When something goes wrong, find the step
 
 ---
 
-## Flow 1 — One row change, end to end · 🔨 steps 1–4, 7, 9 built (T03–T04); lanes + cross-transaction batching (5, 6, 8): T06
-
-Today (T04) the pipeline is one lane: each transaction is applied (step 7, writes merged within the
-transaction) and confirmed before the next one starts.
+## Flow 1 — One row change, end to end · ✅ built (T03–T06); the lag metric in step 10 comes in T09
 
 1. The app runs `UPDATE products SET price_cents = 999 WHERE id = 42` and commits.
    - *Can break:* a table without a primary key. Once it's in a publication, Postgres
@@ -24,8 +21,9 @@ transaction) and confirmed before the next one starts.
      *omitted*, not written as `null`, or the document loses its description.
 5. The router hashes the primary key to lane *k*; the lane queues the event in order.
    - *Can break:* queue full → the stream must pause (Flow 4), never drop events.
-6. The batcher flushes lane *k* at 500 docs or 50 ms. Several changes to one key inside a batch
-   collapse into one final change. It sends `updateDocuments` (merge) / `deleteDocuments`.
+6. When lane *k*'s previous write finishes, it takes everything that queued up meanwhile (up to
+   `batchMax`, default 5000; no timer) and reduces it to one result per key. It sends at most two writes in
+   parallel: `updateDocuments` (merge) and `deleteDocuments`, which touch different keys (D-022).
 7. Meilisearch answers **202 = queued**, then applies the task asynchronously. Driftless waits
    until the task status is `succeeded`.
    - *Can break:* treating 202 as "done"; a `failed` task (bad document) → retry with backoff,
@@ -33,8 +31,7 @@ transaction) and confirmed before the next one starts.
 8. The lane reports "events of txn X applied". The checkpointer marks txn X complete once all
    its events, across all lanes, are applied.
 9. The checkpointer acks the highest commit **end** LSN whose transaction **and every earlier one**
-   are complete. Postgres advances the slot; old WAL can be recycled. (T03: one transaction at a
-   time, confirmed right after it's handled; rules in D-019.)
+   are complete. Postgres advances the slot; old WAL can be recycled. (Confirm rules: D-019.)
    - *Can break:* acking a later transaction while an earlier one is still in flight (data loss
      on crash); acking one byte past the end (BUG-001: the next transaction can be skipped after
      a restart); never acking while idle (WAL grows forever, so confirm the keepalive position when

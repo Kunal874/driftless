@@ -61,7 +61,7 @@ atomicity inside the index. High availability (stretch S2).
 | T03 | Read the WAL | 1–2 | ✅ |
 | T04 | Meilisearch sink, ack after apply | 2 | ✅ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ✅ |
-| T06 | Ordered lanes, batching, checkpointer | 3 | 🔨 |
+| T06 | Ordered lanes, batching, checkpointer | 3 | ✅ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ⬜ |
 | T08 | Backpressure & WAL safety | 5 | ⬜ |
 | T09 | Observability & benchmarks | 5–6 | ⬜ |
@@ -217,7 +217,7 @@ after Meilisearch reports the write `succeeded`.
 
 ---
 
-## T06 — Ordered lanes, batching, checkpointer 🔨
+## T06 — Ordered lanes, batching, checkpointer ✅
 
 **Goal:** parallel throughput without breaking per-key order or the ack-after-apply invariant.
 
@@ -238,7 +238,7 @@ the wiring, so every commit stays runnable.
       `DRIFTLESS_LOG_TXNS`.
 - [x] T06.4 Benchmark: backlog drain (the same backlog, unbatched vs lanes 1 vs lanes 8) → RESULTS.md. Chaos +
       reconcile at 200 tx/s with lanes = 8, batch = 500 → 0 drift
-- [ ] T06.5 Verify (TEST_CHECKLIST → T06), `learn/task-06-lanes-and-batching.md`, checkpoint
+- [x] T06.5 Verify (TEST_CHECKLIST → T06), `learn/task-06-lanes-and-batching.md`, checkpoint
 
 **Dependencies:** none new.
 
