@@ -1,0 +1,3 @@
+# LF line endings in the repo AND in the working tree, even on Windows.
+# Shell scripts and SQL files run inside Linux containers, where CRLF breaks them.
+* text=auto eol=lf

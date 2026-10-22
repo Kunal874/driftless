@@ -1,0 +1,7 @@
+#!/bin/sh
+# Driftless has exactly one author. Reject co-author / AI attribution lines.
+# Enabled per clone with: git config core.hooksPath .githooks
+if grep -qiE '^co-authored-by:|generated with \[?claude' "$1"; then
+  echo "commit-msg: co-author / AI attribution lines are not allowed (docs/CONSTRAINTS.md, rule 1)." >&2
+  exit 1
+fi
