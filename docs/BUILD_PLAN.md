@@ -61,7 +61,7 @@ atomicity inside the index. High availability (stretch S2).
 | T03 | Read the WAL | 1–2 | ✅ |
 | T04 | Meilisearch sink, ack after apply | 2 | ✅ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ✅ |
-| T06 | Ordered lanes, batching, checkpointer | 3 | ⬜ |
+| T06 | Ordered lanes, batching, checkpointer | 3 | 🔨 |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ⬜ |
 | T08 | Backpressure & WAL safety | 5 | ⬜ |
 | T09 | Observability & benchmarks | 5–6 | ⬜ |
@@ -217,20 +217,26 @@ after Meilisearch reports the write `succeeded`.
 
 ---
 
-## T06 — Ordered lanes, batching, checkpointer ⬜
+## T06 — Ordered lanes, batching, checkpointer 🔨
 
 **Goal:** parallel throughput without breaking per-key order or the ack-after-apply invariant.
 
-- [ ] T06.1 `src/pipeline/lanes.ts`: router `hash(pk) % N` (inline FNV-1a, no dependency); each lane is
-      an ordered queue applied one batch at a time
-- [ ] T06.2 Batcher: flush at `BATCH_MAX` docs or `BATCH_MS` ms (defaults 500 / 50). Coalesce per key:
-      each key ends as either one delete or one merged upsert (a delete resets, later upserts merge onto
-      empty), so a batch's upserts and deletes touch disjoint keys and can go in two calls.
-- [ ] T06.3 `src/pipeline/checkpointer.ts`: per transaction, count outstanding events across lanes. Ack
-      the highest commit LSN such that it and all earlier transactions are fully applied. Pure logic +
+*Refined when T06 started:* batching is "natural" (no `BATCH_MS` timer), and the checkpointer comes before
+the wiring, so every commit stays runnable.
+
+- [x] T06.1 `src/pipeline/lanes.ts`: router `hash(pk) % N` (inline FNV-1a, no dependency); each lane is
+      an ordered queue applied one batch at a time. A lane sends whatever queued up while its previous write
+      was in flight, up to `batchMax`. 6 unit tests.
+- [ ] T06.2 `src/pipeline/checkpointer.ts`: per transaction, count outstanding changes across lanes. Ack
+      the highest commit end LSN such that it and all earlier transactions are fully applied. Pure logic +
       unit tests (out-of-order completion, empty transactions, a transaction spanning lanes).
-- [ ] T06.4 Chaos + reconcile with lanes = 8, batch = 500 → 0 drift. Measure sustained throughput with
-      lanes 1 vs 8 (pgbench step test) → RESULTS.md
+- [ ] T06.3 Wire it in. Sink: coalesce per key across a lane batch (each key ends as one delete or one merged
+      upsert, so a batch's upserts and deletes touch disjoint keys → at most 2 writes, sent in parallel);
+      `clear()` for TRUNCATE. Main: dispatch transactions into lanes without waiting; TRUNCATE is a barrier
+      (D-018); the idle check counts in-flight transactions; periodic stats line; knobs `DRIFTLESS_LANES`
+      (default 8), `DRIFTLESS_BATCH_MAX` (default 500), `DRIFTLESS_LOG_TXNS`.
+- [ ] T06.4 Benchmark: backlog drain (the same backlog, unbatched vs lanes 1 vs lanes 8) → RESULTS.md. Chaos +
+      reconcile at 200 tx/s with lanes = 8, batch = 500 → 0 drift
 - [ ] T06.5 Verify (TEST_CHECKLIST → T06), `learn/task-06-lanes-and-batching.md`, checkpoint
 
 **Dependencies:** none new.

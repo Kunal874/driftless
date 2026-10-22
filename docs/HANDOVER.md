@@ -6,8 +6,11 @@ Updated 2026-10-22, end of T05 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T05 — Correctness harness** (tag `checkpoint/T05`)
-- In progress: nothing
-- Next step: **T06.1**: router `hash(pk) % N` + ordered lanes (BUILD_PLAN.md → T06)
+- In progress: **T06** (steps refined in BUILD_PLAN: natural batching with no timer; checkpointer before
+  wiring). T06.1 done: `src/pipeline/lanes.ts` (FNV-1a router, ordered lanes, natural batching ≤ batchMax,
+  `idle()` barrier) + 6 tests. Not wired into `main.ts` yet; the connector still applies one transaction
+  at a time.
+- Next step: **T06.2**: `src/pipeline/checkpointer.ts` + tests
 
 ## What the system holds right now
 
