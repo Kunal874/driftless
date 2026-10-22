@@ -63,6 +63,21 @@ SELECT pg_drop_replication_slot('driftless_slot');
 
 Run SQL with: `docker compose exec postgres psql -U driftless -d shop -c "<sql>"`
 
+### Lost replication slot (`wal_status = 'lost'`)
+
+`max_slot_wal_keep_size` (1 GB in `docker-compose.yml`, T08.4) caps the WAL a slot may hold. If Driftless stays
+down long enough to exceed it, Postgres **invalidates** the slot to protect its own disk. The changes in that WAL are
+gone, so Driftless refuses to start and prints these steps:
+
+1. `SELECT pg_drop_replication_slot('driftless_slot');`
+2. Delete the Meilisearch index `products`: documents of rows deleted during the outage would otherwise survive.
+3. `DELETE FROM driftless_state WHERE name = 'backfill';`
+4. Start Driftless. It creates a new slot *first* (so nothing written from then on is missed), then sees the empty
+   index and backfills every row (D-024). Check with `node scripts/reconcile.ts`.
+
+Watch for it before it happens: `wal_status = 'unreserved'` means the slot is already past the cap, and Driftless logs
+a warning on start.
+
 ## After restoring
 
 Run the global checklist plus the restored task's checks (docs/TEST_CHECKLIST.md), then update

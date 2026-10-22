@@ -8,7 +8,10 @@ services:
     image: postgres:17.11
     # wal_level=logical makes Postgres record enough detail in its WAL to stream
     # row-level changes (logical decoding), which is how Driftless reads changes.
-    command: ["postgres", "-c", "wal_level=logical"]
+    # max_slot_wal_keep_size caps the WAL a replication slot may hold (default: unlimited). Without it, a
+    # Driftless that's down for long enough fills this disk and stops Postgres itself. With it, Postgres gives the
+    # slot up instead, and Driftless refuses to start with recovery steps (T08.4, docs/ROLLBACK.md).
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=1GB"]
     environment:
       POSTGRES_USER: driftless
       POSTGRES_PASSWORD: driftless

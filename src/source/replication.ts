@@ -39,16 +39,37 @@ export async function ensureReplicationSetup(
 
   // The slot comes after the publication, so it never sees changes from before the publication existed.
   // A new slot starts at the current WAL position: rows that already exist are NOT streamed (backfill, T07).
-  const query = 'SELECT plugin, confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = $1';
-  let { rows: [found] } = await db.query<{ plugin: string; confirmed_flush_lsn: string }>(query, [slot]);
+  const query = `SELECT plugin, confirmed_flush_lsn, wal_status,
+                        pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS held
+                 FROM pg_replication_slots WHERE slot_name = $1`;
+  type Slot = { plugin: string; confirmed_flush_lsn: string; wal_status: string; held: string | null };
+  let { rows: [found] } = await db.query<Slot>(query, [slot]);
   if (!found) {
     await db.query(`SELECT pg_create_logical_replication_slot($1, 'pgoutput')`, [slot]);
-    ({ rows: [found] } = await db.query(query, [slot]));
+    ({ rows: [found] } = await db.query<Slot>(query, [slot]));
   }
   if (found.plugin !== 'pgoutput') {
     throw new Error(`slot ${slot} uses plugin '${found.plugin}', expected 'pgoutput'`);
   }
+  // T08.4: Postgres gives a slot up (invalidates it) rather than let it fill the disk past max_slot_wal_keep_size.
+  // The WAL it needed is gone, so the changes in it are lost for the index: never "just continue".
+  if (found.wal_status === 'lost') throw new Error(lostSlotHelp(slot, found.confirmed_flush_lsn));
+  if (found.wal_status === 'unreserved') {
+    console.warn(`driftless: slot ${slot} holds ${found.held} of WAL, past max_slot_wal_keep_size: it will be invalidated soon`);
+  }
   return found.confirmed_flush_lsn;
+}
+
+function lostSlotHelp(slot: string, confirmed: string): string {
+  return [
+    `slot ${slot} was invalidated by Postgres: it held more WAL than max_slot_wal_keep_size allows, so the changes`,
+    `after ${confirmed} are gone and the index can't be trusted any more. To recover (every row is copied again):`,
+    `  1. SELECT pg_drop_replication_slot('${slot}');`,
+    `  2. delete the Meilisearch index (stale documents of rows deleted meanwhile would otherwise survive)`,
+    `  3. DELETE FROM driftless_state WHERE name = 'backfill';`,
+    `  4. start Driftless: it creates a new slot first, then backfills the empty index (D-024)`,
+    `(docs/ROLLBACK.md, "Lost replication slot")`,
+  ].join('\n');
 }
 
 // Driftless needs exactly one primary-key column per table: its value becomes the document id, and

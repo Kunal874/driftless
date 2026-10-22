@@ -31,6 +31,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-023 | Watermark backfill: marks written through the WAL bracket each chunk | Accepted | T07 |
 | D-024 | Backfill progress in an unpublished table; resume beats request | Accepted | T07 |
 | D-025 | Backpressure by pausing the replication socket; safe status timer | Accepted | T08 |
+| D-026 | Cap slot WAL at 1 GB; refuse to start on a lost slot; recovery is manual | Accepted | T08 |
 
 ---
 
@@ -305,3 +306,17 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   transaction**. A transaction is assembled whole before dispatch (proto v1 sends it at commit) and isn't counted, or a
   huge one could never complete. A paused connector lets WAL grow on the server, so `max_slot_wal_keep_size` must
   cap it (T08.4).
+
+### D-026 — Cap slot WAL at 1 GB; refuse to start on a lost slot; recovery is manual
+- **Decision:** `docker-compose.yml` starts Postgres with `max_slot_wal_keep_size=1GB`. On start, Driftless reads the
+  slot's `wal_status`: `lost` → refuse to start and print the recovery steps (ROLLBACK.md); `unreserved` → warn.
+  Recovery stays manual: drop the slot, delete the index, reset the backfill progress, start (a new slot, then a full
+  backfill).
+- **Why:** the default is unlimited. A Driftless that's down long enough would fill the database's disk and stop
+  Postgres itself, the worst thing a sidecar could do. With the cap, Postgres sacrifices the slot instead. A lost slot
+  means changes are gone, so continuing would mean silent drift. Recovery deletes things (a slot, an index), so a
+  person should decide to do it.
+- **Proof (T08.4):** cap lowered to 32 MB, Driftless stopped, writes + 153 MB of unrelated WAL, `CHECKPOINT` →
+  `wal_status = lost` → Driftless refused with the steps → steps followed → 150,085 rows backfilled → 0 drift.
+- **Consequences:** an outage longer than ~1 GB of WAL costs a full backfill (105k rows: ~15–30 s here). Size the cap
+  to the disk and the outage you want to survive.

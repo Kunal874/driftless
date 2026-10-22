@@ -131,6 +131,23 @@ freeze, including the 5-minute ones, far beyond `wal_sender_timeout` (1 min), th
 Memory during the *catch-up* after the freeze peaked at ~300 MiB (8 lanes × up to 5,000-document writes in flight):
 a bounded working set, not a growing queue.
 
+## 7. WAL safety: a dead Driftless can't fill the disk (T08)
+
+Experiment (2026-10-23, Driftless stopped throughout steps 1–3; `max_slot_wal_keep_size` lowered to 32 MB with
+`ALTER SYSTEM` just for the test, then reset):
+
+| Step | Slot |
+|---|---|
+| start | `reserved`, 12 MB of WAL held |
+| after 5,991 transactions Driftless missed | `reserved`, 15 MB |
+| after 1.5M rows into an unrelated table | **`unreserved`, 153 MB** (past the cap) |
+| after `CHECKPOINT` | **`lost`**: Postgres invalidated the slot to protect its disk |
+| start Driftless | refused (exit 1), printing the 4 recovery steps |
+| steps followed: new slot, then backfill of the emptied index | 150,085 rows in 28.6 s → reconcile **0 drift** |
+
+The permanent setting is `max_slot_wal_keep_size=1GB` (in `docker-compose.yml`). After the change the slot reported
+`safe_wal_size` = 1,033 MB of headroom.
+
 **Chunk size** (no load, no delay, 105,175 rows): each chunk costs roughly the same fixed overhead, so bigger is faster.
 
 | `DRIFTLESS_BACKFILL_CHUNK` | Time | Rate |

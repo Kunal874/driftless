@@ -19,8 +19,12 @@ Updated 2026-10-23, end of T07 (session 1). Overwrite this at every checkpoint: 
   Meilisearch time out when it wakes up), and the retry policy wrongly treated it as a rejection (**BUG-004**; no data
   lost thanks to fail-stop + restart + replay). Fixed (408 is retryable), re-run → 0 fatal, 0 drift.
   `slow-sink.sh` now keeps the full connector log. Numbers: RESULTS.md §6.
-- Next step: **T08.4**: WAL safety: watch retained WAL with Driftless stopped, invalidate the slot with a small
-  `max_slot_wal_keep_size` (ALTER SYSTEM), detect `wal_status = 'lost'` on start, recover, then cap at 1 GB in compose
+  T08.4 done (D-026): `replication.ts` refuses to start on `wal_status = 'lost'` (prints 4 recovery steps) and warns
+  on `unreserved`. Experiment: 32 MB cap, Driftless stopped → held 12 → 15 → 153 MB → CHECKPOINT → **lost** → refused
+  → steps followed → 150,085 rows backfilled → **0 drift**. Compose now starts Postgres with
+  `max_slot_wal_keep_size=1GB` (was unlimited); the slot survived the restart (`safe_wal_size` 1,033 MB). ROLLBACK.md
+  has a "Lost replication slot" section.
+- Next step: **T08.5**: checklist, `learn/task-08-backpressure.md` (draft written; fill §2 and §3), checkpoint
 
 ## What the system holds right now
 
