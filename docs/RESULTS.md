@@ -111,6 +111,26 @@ The 10 final runs used 1,000-row chunks on purpose (≈105 race windows per run 
 **420** snapshot rows were dropped because the stream had a newer value (the naive version would have written each
 back), and **9** were only filled in (each would have been a BUG-003 document missing its description).
 
+## 6. Slow sink: Meilisearch frozen under load (T08)
+
+**Command:** `scripts/slow-sink.sh PAUSE_S RATE MAX_PENDING`. It freezes Meilisearch with `docker pause` while the
+workload writes, samples the connector's memory (`docker stats`) and the WAL Postgres holds for the slot every 15 s,
+then unfreezes and reconciles.
+
+| Date | Command | Connector memory during the freeze | WAL held by the end | Fatal errors | Drift |
+|---|---|---|---|---|---|
+| 2026-10-23 | `slow-sink.sh 90 200 2000` | flat ~42 MiB | 8.2 MB | 0 | 0 |
+| 2026-10-23 | `slow-sink.sh 300 600 50000` | rose to ~88 MiB, then flat once paused | 79 MB | **1** (HTTP 408, BUG-004) | 0 |
+| 2026-10-23 | `slow-sink.sh 300 600 100000000` (cap effectively off) | **45 → 220 MiB, still rising** | 105 MB | 0 | 0 |
+| 2026-10-23 | `slow-sink.sh 300 600 50000` (re-run, full log kept) | ≤ 100 MiB | 79 MB | 1 (408 captured) | 0 |
+| 2026-10-23 | `slow-sink.sh 300 600 50000` (after the BUG-004 fix) | 75–128 MiB (GC) | 111 MB | **0** | 0 |
+
+Each 5-minute run wrote ~216,000 transactions. With the cap, reading pauses at 50,000 waiting changes and the backlog
+waits in Postgres's WAL. Without it, everything is pulled into memory, which only grows. The connection survived every
+freeze, including the 5-minute ones, far beyond `wal_sender_timeout` (1 min), thanks to the 10 s status re-send.
+Memory during the *catch-up* after the freeze peaked at ~300 MiB (8 lanes × up to 5,000-document writes in flight):
+a bounded working set, not a growing queue.
+
 **Chunk size** (no load, no delay, 105,175 rows): each chunk costs roughly the same fixed overhead, so bigger is faster.
 
 | `DRIFTLESS_BACKFILL_CHUNK` | Time | Rate |

@@ -79,10 +79,10 @@ describe('submit (retry policy, D-021)', () => {
 
   it('keeps retrying while Meilisearch is unreachable or overloaded', async () => {
     const logged: string[] = [];
-    const write = scripted(unreachable(), httpError(503), httpError(429), unreachable(), 'succeeded');
+    const write = scripted(unreachable(), httpError(503), httpError(429), httpError(408), unreachable(), 'succeeded');
     await submit(write, 'id 1', { ...fast, log: (m) => logged.push(m) });
-    expect(write.calls).toBe(5);
-    expect(logged).toHaveLength(4);
+    expect(write.calls).toBe(6); // 408 included: a woken-up Meilisearch answers it (BUG-004)
+    expect(logged).toHaveLength(5);
     expect(logged[0]).toMatch(/unavailable.*\[id 1\]; attempt 1/);
   });
 

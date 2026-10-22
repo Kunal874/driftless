@@ -14,7 +14,13 @@ Updated 2026-10-23, end of T07 (session 1). Overwrite this at every checkpoint: 
   `scripts/slow-sink.sh PAUSE_S RATE MAX_PENDING`. Verified `slow-sink.sh 90 200 2000`: paused at exactly 2,000; memory
   flat ~42 MiB for the 90 s freeze; WAL held for the slot 0.8 → 8.2 MB; **0 fatal** (survived > 60 s
   `wal_sender_timeout`); 0 drift. `npm test` 44/44.
-- Next step: **T08.3**: 5-min freeze at 600 tx/s, cap 50,000 vs unbounded, comparing memory
+  T08.3 done: 5-min freezes at 600 tx/s (~216k tx each). Capped: memory bounded (≤ ~130 MiB) and the backlog waited
+  as WAL; uncapped: 45 → 220 MiB and rising. The capped run had **1 fatal: HTTP 408** (requests sent to the frozen
+  Meilisearch time out when it wakes up), and the retry policy wrongly treated it as a rejection (**BUG-004**; no data
+  lost thanks to fail-stop + restart + replay). Fixed (408 is retryable), re-run → 0 fatal, 0 drift.
+  `slow-sink.sh` now keeps the full connector log. Numbers: RESULTS.md §6.
+- Next step: **T08.4**: WAL safety: watch retained WAL with Driftless stopped, invalidate the slot with a small
+  `max_slot_wal_keep_size` (ALTER SYSTEM), detect `wal_status = 'lost'` on start, recover, then cap at 1 GB in compose
 
 ## What the system holds right now
 

@@ -222,10 +222,11 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 
 ### D-021 — Retry policy: wait out unavailability, fail-stop on rejection
 - **Decision:** (`submit()` in `src/sinks/meilisearch.ts`; refines D-009)
-  - *Meilisearch unavailable* (network error, request or task-wait timeout, HTTP 5xx, HTTP 429): retry
+  - *Meilisearch unavailable* (network error, request or task-wait timeout, HTTP 5xx, HTTP 429, HTTP 408): retry
     **without limit**, using exponential backoff with full jitter (random 0 … min(30 s, 100 ms × 2^attempt)).
+    (408 was added in T08 after BUG-004: it's what a frozen Meilisearch answers once it wakes up.)
   - *Meilisearch rejected the write* (task `failed`): try 3 times in total, then stop with an error naming
-    the transaction and ids. HTTP 4xx stops immediately.
+    the transaction and ids. Other HTTP 4xx stops immediately.
 - **Why:** an outage is temporary, and waiting loses nothing: nothing is confirmed, so Postgres keeps the WAL
   and lag shows the problem. A rejection is usually deterministic (a bad document), so retrying forever
   would hang silently. Jitter keeps retries from arriving in synchronized waves when the server comes back.

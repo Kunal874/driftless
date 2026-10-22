@@ -79,9 +79,9 @@ export const backoffMs = (attempt: number): number => Math.random() * Math.min(3
 type RetryOptions = { maxRejections?: number; backoff?: (attempt: number) => number; log?: (message: string) => void };
 
 // Runs one write until Meilisearch has really applied it (D-021):
-// - Meilisearch unreachable or overloaded (network error, timeout, HTTP 5xx/429): retry with backoff, for as
+// - Meilisearch unreachable or overloaded (network error, timeout, HTTP 5xx/429/408): retry with backoff, for as
 //   long as it takes. Nothing is confirmed meanwhile, so lag grows visibly and nothing is lost.
-// - Meilisearch rejected the write (task failed, HTTP 4xx): try `maxRejections` times in case it was a fluke,
+// - Meilisearch rejected the write (task failed, other HTTP 4xx): try `maxRejections` times in case it was a fluke,
 //   then throw. Fail-stop (D-009): stopping is visible and loses nothing; skipping would drift silently.
 // Re-sending after an error is safe: writes are idempotent, and Meilisearch applies tasks in order.
 export async function submit(write: () => EnqueuedTaskPromise, what: string, options: RetryOptions = {}): Promise<void> {
@@ -104,8 +104,12 @@ export async function submit(write: () => EnqueuedTaskPromise, what: string, opt
   }
 }
 
+// 408 (Request Timeout) means "the server gave up waiting for the request: send it again". It's what a frozen
+// Meilisearch answers once it wakes up, so it must not count as a rejection (BUG-004).
+const RETRYABLE_STATUS = new Set([408, 429]);
+
 function isTransient(err: unknown): boolean {
-  if (err instanceof MeilisearchApiError) return err.response.status >= 500 || err.response.status === 429;
+  if (err instanceof MeilisearchApiError) return err.response.status >= 500 || RETRYABLE_STATUS.has(err.response.status);
   return err instanceof MeilisearchRequestError || err instanceof MeilisearchRequestTimeOutError || err instanceof MeilisearchTaskTimeOutError;
 }
 

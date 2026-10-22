@@ -34,12 +34,16 @@ docker compose unpause meilisearch >/dev/null 2>&1
 echo "slow-sink: Meilisearch unfrozen"
 
 wait "$workload"
-grep -E '^number of (transactions actually processed|failed transactions)' "$workload_log" | sed 's/^/  workload: /'
-docker compose logs connector --since "$since" --no-log-prefix | grep -E 'paused|resumed reading|fatal|timeout' | head -6 | sed 's/^/  log: /'
-echo "  log: $(docker compose logs connector --since "$since" --no-log-prefix | grep -cE 'paused reading') pause(s), $(docker compose logs connector --since "$since" --no-log-prefix | grep -c 'fatal') fatal error(s)"
+grep -E '^number of (transactions actually processed|failed transactions)' "$workload_log" | sed 's/^/  workload: /' || true
 
 status=0
 node scripts/reconcile.ts --timeout=900 || status=$?
 echo "slow-sink: after catching up: connector memory $(memory), WAL held for the slot $(held_wal)"
+
+# Keep the connector's whole log: the next run recreates the container, which deletes it.
+connector_log=$(mktemp)
+docker compose logs connector --since "$since" --no-log-prefix > "$connector_log" 2>&1 || true
+echo "  log: $(grep -c 'paused reading' "$connector_log" || true) pause(s), $(grep -c 'fatal' "$connector_log" || true) fatal error(s), $(grep -c 'streaming slot' "$connector_log" || true) start(s); full log: $connector_log"
+grep -A8 'fatal' "$connector_log" | head -40 | sed 's/^/  log: /' || true
 docker compose stop connector >/dev/null 2>&1
 exit "$status"
