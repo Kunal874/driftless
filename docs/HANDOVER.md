@@ -6,8 +6,22 @@ Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T02 — Source database & workload** (tag `checkpoint/T02`)
-- In progress: nothing
-- Next step: **T03.1**: Node/TypeScript project (`package.json`, `tsconfig.json`), see BUILD_PLAN.md → T03
+- In progress: **T03**. T03.1 done: `package.json` (pg 8.23.1, pg-logical-replication 2.5.0;
+  dev: typescript 7.0.2, vitest 5.0.3, @types/node 24, @types/pg), `tsconfig.json`, `src/config.ts`.
+  `npm run typecheck` passes; `node src/*.ts` runs with no build step.
+- Next step: **T03.2**: `src/source/replication.ts` (startup checks, publication, slot)
+
+## pg-logical-replication 2.5.0: what reading its source showed (T03.1)
+
+`node_modules/pg-logical-replication/dist/logical-replication-service.js`:
+1. `acknowledge.auto` defaults to **true**: every message is acked on *receipt* (at-most-once).
+2. `acknowledge.timeoutSeconds` defaults to **10**: a timer acks the last **received** LSN, *even with
+   auto = false*. Must be set to 0; we answer keepalive requests ourselves.
+3. `acknowledge(lsn)` sends **lsn + 1**. Postgres expects an end position, so passing a commit's end LSN
+   over-reports by 1 byte. After a restart, that can make Postgres skip the next transaction if its
+   commit record starts exactly there. We pass `end − 1` (to verify in T03.4 → docs/bugs).
+4. With `flowControl` on, keepalives bypass the library's queue, so an "idle" ack could cover queued,
+   unhandled transactions. T03 uses its own queue instead.
 
 ## What the database holds right now
 

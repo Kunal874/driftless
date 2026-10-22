@@ -22,6 +22,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-014 | One branch, one commit per step, checkpoint tags | Accepted | T01 |
 | D-015 | Correctness harness before performance work | Accepted | plan |
 | D-016 | Deterministic seed data + one workload definition | Accepted | T02 |
+| D-017 | New dependency versions must be at least 14 days old | Accepted | T03 |
 
 ---
 
@@ -161,3 +162,11 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 - **Why:** benchmark and chaos numbers are only comparable if the data and the load are the same each time.
 - **Consequences:** changing the seed, the mix or the weights makes earlier RESULTS.md numbers
   incomparable. Do it only deliberately, and note it in RESULTS.md.
+
+### D-017 — New dependency versions must be at least 14 days old
+- **Decision:** install with `npm install --before=<today − 14 days>` (Git Bash:
+  `--before="$(date -d '-14 days' +%F)"`). `package-lock.json` then pins the exact versions.
+- **Why:** a broken or compromised release is usually noticed and pulled within days, and waiting two
+  weeks costs this project nothing. On 2026-10-22, `pg-logical-replication` 2.6.0 was 8 days old, so we
+  took 2.5.0; `vitest` 5.0.3 instead of the 7-day-old 5.0.5.
+- **Consequences:** upgrades are deliberate. Use `npm ci` to install exactly what the lockfile says.

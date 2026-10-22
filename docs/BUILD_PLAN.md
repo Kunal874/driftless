@@ -58,7 +58,7 @@ atomicity inside the index. High availability (stretch S2).
 |---|---|---|---|
 | T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | ✅ |
 | T02 | Source database & write workload | 1 | ✅ |
-| T03 | Read the WAL | 1–2 | ⬜ |
+| T03 | Read the WAL | 1–2 | 🔨 |
 | T04 | Meilisearch sink, ack after apply | 2 | ⬜ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ⬜ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ⬜ |
@@ -118,12 +118,12 @@ later task has something to sync and something to stress it with.
 
 ---
 
-## T03 — Read the WAL ⬜
+## T03 — Read the WAL 🔨
 
 **Goal:** a Node/TypeScript process that streams committed row changes, prints them as typed
 events grouped by transaction, and acknowledges progress manually.
 
-- [ ] T03.1 Node project: `package.json` (`"type": "module"`; scripts `start: node src/main.ts`,
+- [x] T03.1 Node project: `package.json` (`"type": "module"`; scripts `start: node src/main.ts`,
       `typecheck: tsc`, `test: vitest run`) and `tsconfig.json` (`noEmit`, `strict`, `module` +
       `moduleResolution: nodenext`, `target: es2024`, `erasableSyntaxOnly`, `verbatimModuleSyntax`,
       `allowImportingTsExtensions`). Connection settings: local-dev defaults (127.0.0.1:5440,

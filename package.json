@@ -1,0 +1,25 @@
+{
+  "name": "driftless",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Keeps a Meilisearch index in sync with PostgreSQL by reading the WAL (logical replication).",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pg": "^8.23.1",
+    "pg-logical-replication": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
