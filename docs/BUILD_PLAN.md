@@ -166,7 +166,7 @@ after Meilisearch reports the write `succeeded`.
 
 - [x] T04.1 Create index `products` with explicit primary key `id` if missing. `src/sinks/document.ts`
       maps row → document; it's the single source of truth, reused by reconcile in T05.
-- [ ] T04.2 `src/sinks/meilisearch.ts`: insert/update → `updateDocuments` (merge: keeps fields we didn't
+- [x] T04.2 `src/sinks/meilisearch.ts`: insert/update → `updateDocuments` (merge: keeps fields we didn't
       receive); delete → `deleteDocuments([id])`. Omit unchanged-TOAST columns; never write them as null.
 - [ ] T04.3 Ack after apply: wait for each task to be `succeeded` before acking that transaction's commit
       LSN (simple in-order checkpointer, one lane). Failures → retry with exponential backoff + jitter;

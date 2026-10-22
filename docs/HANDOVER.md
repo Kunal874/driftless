@@ -10,14 +10,21 @@ Updated 2026-10-22, end of T03 (session 1). Overwrite this at every checkpoint: 
   Meilisearch settings + table → index; `src/sinks/document.ts` (row → document, D-020);
   `ensureIndex()` in `src/sinks/meilisearch.ts` creates `products` with primary key `id`, idempotently
   (verified). The connector still only prints + confirms; it doesn't write documents yet.
-- Next step: **T04.2**: the sink: merge updates, deletes, truncate → clear, wired into `handle()`
+- T04.2 done: `meilisearchSink().apply(txn)` (`planSteps`: consecutive same-kind changes → one write, merged
+  per key in order; delete/TRUNCATE never reordered; 10k-doc chunks), wired into `handle()` before
+  `confirm()`. Live: re-seed streamed TRUNCATE + 100k rows → indexed in 4.1 s; 100,000 rows = 100,000 docs;
+  11 sampled ids match exactly (incl. #10 keeping its 2,560-char description after a price-only update).
+  **Measured baseline:** ~100 ms per transaction (one Meilisearch task each) → ~10 txn/s max with one lane.
+  That's the reason for T06 batching across transactions.
+- Next step: **T04.3**: retry policy (unavailable → retry forever with jittered backoff; rejected → 3 tries,
+  then fail-stop) + unit tests
 
 ## What the system holds right now
 
 - `products`: 100,000 rows (re-seeded during T03, plus a few test edits to ids 1–6 and 10).
 - Publication `driftless_pub` (insert/update/delete/truncate) and slot `driftless_slot`, recreated fresh
   in T03.6 and fully caught up (`confirmed_flush_lsn` = server WAL position `0/9F1E0A8`).
-- Meilisearch: index `products` (primary key `id`), empty.
+- Meilisearch: index `products` (primary key `id`), in sync with Postgres (100,000 docs, T04.2).
 
 ## Done so far
 

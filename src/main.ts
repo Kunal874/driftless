@@ -5,10 +5,11 @@ import * as config from './config.ts';
 import { ensureReplicationSetup } from './source/replication.ts';
 import { transactionAssembler, type Transaction } from './source/decode.ts';
 import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
-import { ensureIndex } from './sinks/meilisearch.ts';
+import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
 
 const meili = new Meilisearch(config.meilisearch);
 await ensureIndex(meili, config.index.uid, config.index.primaryKey);
+const sink = meilisearchSink(meili.index(config.index.uid), config.table);
 
 const db = new pg.Client(config.pgConfig);
 await db.connect();
@@ -64,6 +65,9 @@ async function drain(): Promise<void> {
 
 async function handle(txn: Transaction): Promise<void> {
   console.log(describe(txn));
+  const started = performance.now();
+  await sink.apply(txn); // returns only once Meilisearch reports every write `succeeded`
+  console.log(`  applied in ${Math.round(performance.now() - started)} ms`);
   if (config.debugAckDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, config.debugAckDelayMs));
   await confirm(lsnToBigInt(txn.commitEndLsn)); // ack only after handling (D-006)
   console.log(`  confirmed ${txn.commitEndLsn}`);
