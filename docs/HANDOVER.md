@@ -9,7 +9,11 @@ Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: 
 - In progress: **T03**. T03.1 done: `package.json` (pg 8.23.1, pg-logical-replication 2.5.0;
   dev: typescript 7.0.2, vitest 5.0.3, @types/node 24, @types/pg), `tsconfig.json`, `src/config.ts`.
   `npm run typecheck` passes; `node src/*.ts` runs with no build step.
-- Next step: **T03.2**: `src/source/replication.ts` (startup checks, publication, slot)
+- T03.2 done: `src/source/replication.ts` checks `wal_level`, the primary key and replica identity, then
+  creates `driftless_pub` (publishes truncate too, D-018) and `driftless_slot` (pgoutput) only if
+  missing. Verified idempotent; clear errors for a missing table or a table without a primary key.
+  **The slot now exists** (created at `0/71F31D8`) and retains WAL until Driftless acks.
+- Next step: **T03.3**: stream + decode (`src/source/decode.ts`, `src/main.ts`)
 
 ## pg-logical-replication 2.5.0: what reading its source showed (T03.1)
 
@@ -27,7 +31,7 @@ Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: 
 
 - `products`: 99,965 rows (seeded 100,000, then one 30 s workload run). Re-seed any time with
   `db/seed.sql` and you get identical data.
-- No publications and no replication slots yet (T03 creates them). Meilisearch: no indexes.
+- Publication `driftless_pub` and slot `driftless_slot` exist (since T03.2). Meilisearch: no indexes.
 
 ## Done so far
 

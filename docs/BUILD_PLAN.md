@@ -129,7 +129,7 @@ events grouped by transaction, and acknowledges progress manually.
       `allowImportingTsExtensions`). Connection settings: local-dev defaults (127.0.0.1:5440,
       driftless/driftless, db `shop`), overridable with the standard `PGHOST`/`PGPORT`/… env vars
       that `pg` reads natively.
-- [ ] T03.2 `src/source/replication.ts`: on start, check `wal_level = logical`. Create publication
+- [x] T03.2 `src/source/replication.ts`: on start, check `wal_level = logical`. Create publication
       `driftless_pub FOR TABLE public.products` and slot `driftless_slot`
       (`pg_create_logical_replication_slot('driftless_slot', 'pgoutput')`) only if missing. Check every
       published table has a primary key.

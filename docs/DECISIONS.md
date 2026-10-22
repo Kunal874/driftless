@@ -23,6 +23,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-015 | Correctness harness before performance work | Accepted | plan |
 | D-016 | Deterministic seed data + one workload definition | Accepted | T02 |
 | D-017 | New dependency versions must be at least 14 days old | Accepted | T03 |
+| D-018 | TRUNCATE is streamed and handled, not filtered out | Accepted | T03 |
 
 ---
 
@@ -170,3 +171,11 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   weeks costs this project nothing. On 2026-10-22, `pg-logical-replication` 2.6.0 was 8 days old, so we
   took 2.5.0; `vitest` 5.0.3 instead of the 7-day-old 5.0.5.
 - **Consequences:** upgrades are deliberate. Use `npm ci` to install exactly what the lockfile says.
+
+### D-018 — TRUNCATE is streamed and handled, not filtered out
+- **Decision:** the publication keeps Postgres's default `publish = 'insert, update, delete, truncate'`. The
+  decoder emits a `truncate` change; the sink (T04) removes all documents of that table.
+- **Why:** filtering TRUNCATE out means `TRUNCATE` followed by re-inserts (exactly what `db/seed.sql` does)
+  leaves every deleted row in the index forever. That's silent drift, and handling it is one sink call.
+- **Consequences:** in T06 a truncate must act as a barrier across lanes: everything before it is applied
+  first, and nothing after it is applied before it.
