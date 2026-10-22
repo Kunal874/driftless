@@ -60,7 +60,7 @@ atomicity inside the index. High availability (stretch S2).
 | T02 | Source database & write workload | 1 | ✅ |
 | T03 | Read the WAL | 1–2 | ✅ |
 | T04 | Meilisearch sink, ack after apply | 2 | ✅ |
-| T05 | Correctness harness (reconcile + chaos) | 2–3 | ⬜ |
+| T05 | Correctness harness (reconcile + chaos) | 2–3 | 🔨 |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ⬜ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ⬜ |
 | T08 | Backpressure & WAL safety | 5 | ⬜ |
@@ -187,11 +187,11 @@ after Meilisearch reports the write `succeeded`.
 
 ---
 
-## T05 — Correctness harness ⬜
+## T05 — Correctness harness 🔨
 
 **Goal:** an automated, repeatable proof of "zero drift", built *before* any optimisation (D-015).
 
-- [ ] T05.1 `scripts/reconcile.ts`: wait for full catch-up (slot `confirmed_flush_lsn` ≥
+- [x] T05.1 `scripts/reconcile.ts`: wait for full catch-up (slot `confirmed_flush_lsn` ≥
       `pg_current_wal_lsn()` and no enqueued/processing Meilisearch tasks). Then compare every row with
       its document via `document.ts` + a canonical hash, in primary-key ranges (make `id` filterable).
       Print missing / extra / mismatched counts with sample ids; exit 1 on any drift.

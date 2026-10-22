@@ -6,8 +6,12 @@ Updated 2026-10-22, end of T04 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T04 — Meilisearch sink, ack after apply** (tag `checkpoint/T04`)
-- In progress: nothing
-- Next step: **T05.1**: `scripts/reconcile.ts` (BUILD_PLAN.md → T05)
+- In progress: **T05**. T05.1 done: `scripts/reconcile.ts`. It waits for catch-up (slot ≥ WAL position at
+  start + no pending Meilisearch tasks), compares every row with its document via `toDocument` in 1,000-id
+  chunks (`getDocuments({ ids })`), and finds extra documents. Exit 0 = OK, 1 = drift, 2 = couldn't check.
+  Live: 100,000 rows vs 100,000 docs, **0 drift**, 4.7 s; with the connector stopped it exits 2 ("Is Driftless
+  running?"). `--self-test` mode is in the same file.
+- Next step: **T05.2**: verify `--self-test` (planted 1 mismatched / 1 missing / 1 extra must all be found)
 
 ## What the system holds right now
 
