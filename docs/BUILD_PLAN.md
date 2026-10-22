@@ -63,7 +63,7 @@ atomicity inside the index. High availability (stretch S2).
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ✅ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ✅ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ✅ |
-| T08 | Backpressure & WAL safety | 5 | 🔨 |
+| T08 | Backpressure & WAL safety | 5 | ✅ |
 | T09 | Observability & benchmarks | 5–6 | ⬜ |
 | T10 | Config, packaging, README, release | 6 | ⬜ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
@@ -275,7 +275,7 @@ First reproduce the naive race, then fix it (D-008).
 
 ---
 
-## T08 — Backpressure & WAL safety 🔨
+## T08 — Backpressure & WAL safety ✅
 
 **Goal:** a slow or dead sink never crashes Driftless, and a dead Driftless never fills the Postgres disk.
 
@@ -287,7 +287,7 @@ First reproduce the naive race, then fix it (D-008).
 - [x] T08.4 WAL safety: first observe retained WAL growing with the connector stopped (record it). Then set
       `max_slot_wal_keep_size` in compose. On start, detect `wal_status = 'lost'` and stop with recovery
       steps (drop + recreate slot, re-backfill).
-- [ ] T08.5 Verify (TEST_CHECKLIST → T08), `learn/task-08-backpressure.md`, checkpoint
+- [x] T08.5 Verify (TEST_CHECKLIST → T08), `learn/task-08-backpressure.md`, checkpoint
 
 **Dependencies:** none new.
 

@@ -1,67 +1,47 @@
 # Handover — where we left off
 
-Updated 2026-10-23, end of T07 (session 1). Overwrite this at every checkpoint: it describes
+Updated 2026-10-23, end of T08 (session 1). Overwrite this at every checkpoint: it describes
 *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T07 — Backfill** (tag `checkpoint/T07`)
-- In progress: **T08**. T08.1 done (spike, D-025): pause `service._connection.stream` (the `net.Socket` pg reads
-  via `'data'` events) at a pending-work cap, resume at half; re-send the confirmed position every 10 s
-  (`wal_sender_timeout` is 1 min). Found: `max_slot_wal_keep_size` is −1 (unlimited) on this stack.
-  T08.2 done: `src/pipeline/backpressure.ts` (`nextReadState`, + 2 tests) and in `main.ts` the socket pause/resume
-  (cap `DRIFTLESS_MAX_PENDING`, default 50,000; resume at half), a 10 s status re-send, and a stats line while paused.
-  `scripts/slow-sink.sh PAUSE_S RATE MAX_PENDING`. Verified `slow-sink.sh 90 200 2000`: paused at exactly 2,000; memory
-  flat ~42 MiB for the 90 s freeze; WAL held for the slot 0.8 → 8.2 MB; **0 fatal** (survived > 60 s
-  `wal_sender_timeout`); 0 drift. `npm test` 44/44.
-  T08.3 done: 5-min freezes at 600 tx/s (~216k tx each). Capped: memory bounded (≤ ~130 MiB) and the backlog waited
-  as WAL; uncapped: 45 → 220 MiB and rising. The capped run had **1 fatal: HTTP 408** (requests sent to the frozen
-  Meilisearch time out when it wakes up), and the retry policy wrongly treated it as a rejection (**BUG-004**; no data
-  lost thanks to fail-stop + restart + replay). Fixed (408 is retryable), re-run → 0 fatal, 0 drift.
-  `slow-sink.sh` now keeps the full connector log. Numbers: RESULTS.md §6.
-  T08.4 done (D-026): `replication.ts` refuses to start on `wal_status = 'lost'` (prints 4 recovery steps) and warns
-  on `unreserved`. Experiment: 32 MB cap, Driftless stopped → held 12 → 15 → 153 MB → CHECKPOINT → **lost** → refused
-  → steps followed → 150,085 rows backfilled → **0 drift**. Compose now starts Postgres with
-  `max_slot_wal_keep_size=1GB` (was unlimited); the slot survived the restart (`safe_wal_size` 1,033 MB). ROLLBACK.md
-  has a "Lost replication slot" section.
-- Next step: **T08.5**: checklist, `learn/task-08-backpressure.md` (draft written; fill §2 and §3), checkpoint
+- Last checkpoint: **T08 — Backpressure & WAL safety** (tag `checkpoint/T08`)
+- In progress: nothing
+- Next step: **T09.1**: `src/metrics.ts` + `GET /metrics` with `prom-client` (BUILD_PLAN.md → T09)
 
 ## What the system holds right now
 
-- `products`: ~113,728 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, from the 10th proof run).
-- `driftless_state`: backfill `done`. Publication streams `products` + `driftless_watermark`. Slot caught up.
-- The `connector` service is **stopped** (`backfill-race.sh` stops it at the end).
+- `products`: ~150,085 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0).
+- A **new** slot `driftless_slot` (recreated during the T08.4 recovery experiment), caught up.
+- Postgres now runs with `max_slot_wal_keep_size=1GB` (compose). The `connector` service is **stopped**.
 
 ## Done so far
 
-- **T01–T06 ✅**: foundation, source data, WAL reader + confirm protocol (BUG-001), sink + retry policy, correctness
-  harness, lanes + batching + checkpointer (9 → 6,752 tx/s; chaos at 200 tx/s, 0 drift).
-- **T07 ✅**: backfill. Naive version reproduced the race (**BUG-002**: 42 docs wrong). Watermark version (D-023)
-  left 1 (**BUG-003**: Postgres omits unchanged TOAST, so the window became column-aware). Progress in unpublished
-  `driftless_state`, resume after crashes (D-024). **10/10 proof runs at 0 drift** (420 stale snapshot rows dropped,
-  9 filled in); 6 SIGKILLs mid-backfill → resumed → 0 drift. Default chunk 10,000 (105k rows in 14 s).
-  `npm test` 42/42.
+- **T01–T07 ✅**: foundation, source data, WAL reader + confirm protocol (BUG-001), sink + retry policy, correctness
+  harness, lanes + batching + checkpointer (9 → 6,752 tx/s), watermark backfill (BUG-002, BUG-003; 10/10 at 0 drift).
+- **T08 ✅**: backpressure (D-025): pause the replication socket at `DRIFTLESS_MAX_PENDING` (50,000), resume at half,
+  10 s status re-send. 5-min Meilisearch freeze at 600 tx/s → memory bounded vs 45 → 220 MiB uncapped. **BUG-004**
+  (HTTP 408 treated as a rejection) found and fixed. WAL safety (D-026): 1 GB slot cap; refuse to start on a lost slot
+  with recovery steps; recovery proven (0 drift). `npm test` 44/44.
 
-## Notes for T08 (read before starting)
+## Notes for T09 (read before starting)
 
-- **Where memory can grow today:** the stream message queue (`queue` in `src/main.ts`) and the lanes
-  (`queued()` in `src/pipeline/lanes.ts`) are unbounded. The backfill is bounded (one chunk, ≤ 10,000 rows, in
-  flight at a time).
-- To pause reading, `pg-logical-replication`'s `flowControl` pauses `connection.stream`, but its keepalives bypass
-  its queue (D-019), so if used, keep Driftless's own idle check. While paused, keepalive requests aren't read:
-  send periodic status updates yourself, or `wal_sender_timeout` (60 s) drops the connection.
-- Slow-sink test idea: `docker pause driftless-meilisearch-1` for 5 min under load, watch the connector's memory
-  (`docker stats`), unpause, reconcile.
-- WAL safety: first *observe* retained WAL growing with the connector stopped (`pg_replication_slots`), then set
-  `max_slot_wal_keep_size` in compose and detect `wal_status = 'lost'` on start (recover = new slot + backfill;
-  the empty-index rule of D-024 can help).
+- `prom-client` is pre-approved; install with the 14-day rule (D-017).
+- **Lag** = time a transaction becomes confirmable − its `commitTime`. The natural place is `Checkpointer.advance()`: give
+  `track()` the commit time and observe each transaction it moves past. That measures commit → applied *and* confirmable.
+- Useful gauges already exist as values in `main.ts`: changes waiting (`queue.length + lanes.queued()`), `readingPaused`,
+  `checkpointer.inFlight`, `confirmed`. Retained WAL needs a periodic `pg_replication_slots` query (one small pg client).
+- Prometheus/Grafana ports: 9090 and 3000 were free at T01. Check again before binding (other projects' containers start
+  with Docker). Bind to `127.0.0.1`.
+- Headline numbers to produce (RESULTS.md "Resume claims"): lag p99 at fixed rates, and one long chaos run at full rate
+  with reconcile.
 
-## Files changed in T07
+## Files changed in T08
 
-`src/source/backfill.ts` (+ tests), `src/source/replication.ts`, `src/main.ts`, `src/config.ts`,
-`docker-compose.yml`, `scripts/backfill-race.sh`, `docs/bugs/BUG-002-…`, `docs/bugs/BUG-003-…`, `docs/` (DECISIONS
-D-023, D-024, RESULTS §5, FLOW, ARCHITECTURE, ROLLBACK, BUILD_PLAN, TEST_CHECKLIST), `AGENTS.md` status,
-`learn/task-07-backfill.md`
+`src/pipeline/backpressure.ts` (+ test), `src/main.ts`, `src/config.ts`, `src/sinks/meilisearch.ts` (+ test),
+`src/source/replication.ts`, `docker-compose.yml`, `scripts/slow-sink.sh`, `docs/bugs/BUG-004-…`, `docs/` (DECISIONS D-025,
+D-026, D-021 update, RESULTS §6–7, ROLLBACK, FLOW, ARCHITECTURE, BUILD_PLAN, TEST_CHECKLIST), `AGENTS.md` status,
+`learn/task-08-backpressure.md`
 
 ## Environment (verified 2026-10-23)
 
@@ -81,7 +61,8 @@ D-023, D-024, RESULTS §5, FLOW, ARCHITECTURE, ROLLBACK, BUILD_PLAN, TEST_CHECKL
   `taskkill //F //PID "$(cat /proc/$PID/winpid)"`. **Never** `taskkill /IM node.exe`: it would also kill the
   AI tool. (Inside Docker: `docker compose kill -s SIGKILL connector`.)
 - For agents: `cd` in a Bash call persists across calls. Start commands with `cd /d/PROJECTS/driftless`.
-- Long runs (chaos, benchmarks, backfill races) belong in the background.
+- Long runs (chaos, benchmarks, backfill races, slow-sink) belong in the background.
+- `docker compose up -d --force-recreate` deletes the old container's logs. Save logs first if you need them (BUG-004 lesson).
 - Docker Desktop may be stopped at session start. Start it before `docker compose up -d --wait`.
 - Init scripts in `db/init/` only run on an **empty** volume (`docker compose down -v` wipes data; ask first).
 - BUG-001 could be reported upstream to `kibae/pg-logical-replication`. That's the owner's decision

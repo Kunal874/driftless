@@ -101,12 +101,15 @@ Handy commands:
 - [x] Kill during backfill → resumes from the last *applied* chunk; final reconcile = 0 (6 SIGKILLs, 6 resumes)
 - [x] Backfill duration for 105,175 rows recorded: 104 s / 23 s / 14 s at 1,000 / 5,000 / 10,000-row chunks
 
-## T08 — Backpressure & WAL safety
+## T08 — Backpressure & WAL safety ✅ (verified 2026-10-23)
 
-- [ ] `docker pause` Meilisearch for 5 min under load → connector memory stays under [X] MB, no crash
-- [ ] Unpause → catches up → reconcile = 0
-- [ ] With the connector stopped, retained WAL grows (observed + recorded); with `max_slot_wal_keep_size` set, it's capped
-- [ ] Invalidated slot (`wal_status = 'lost'`) → connector refuses to start and prints recovery steps
+- [x] `docker pause` Meilisearch for 5 min under load → connector memory stays bounded, no crash
+      (cap 50,000: ≤ ~130 MiB at 600 tx/s; cap off: 45 → 220 MiB rising; the first run's crash was BUG-004, fixed → 0 fatal)
+- [x] Unpause → catches up → reconcile = 0 (every slow-sink run)
+- [x] With the connector stopped, retained WAL grows (12 → 15 → 153 MB recorded); with `max_slot_wal_keep_size` set,
+      Postgres invalidates the slot instead of keeping it (32 MB test cap; 1 GB in compose)
+- [x] Invalidated slot (`wal_status = 'lost'`) → connector refuses to start and prints recovery steps; following them
+      → 0 drift
 
 ## T09 — Observability & benchmarks
 

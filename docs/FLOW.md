@@ -80,12 +80,14 @@ reproduced on purpose in T07.2: 42 documents wrong).
 
 ---
 
-## Flow 4 — Slow sink, backpressure and WAL safety · 📐 (built in T08)
+## Flow 4 — Slow sink, backpressure and WAL safety · ✅ built in T08 (D-025, D-026)
 
 1. Meilisearch slows down or stops, so lane queues fill up.
-2. At the high-water mark Driftless stops reading the replication stream. TCP backpressure
-   stops the WAL sender; Postgres keeps the WAL on disk (watched via retained-WAL metric).
-3. Meilisearch recovers → queues drain below the low-water mark → reading resumes.
+2. At `DRIFTLESS_MAX_PENDING` waiting changes (default 50,000), Driftless pauses the replication socket.
+   TCP backpressure stops the WAL sender; Postgres keeps the WAL on disk. A 10 s status re-send keeps the
+   connection alive (`wal_sender_timeout` is 1 min).
+3. Meilisearch recovers → queues drain to half the cap → reading resumes. (Requests that hit a frozen
+   Meilisearch may come back 408; that's retried, BUG-004.)
 4. If Driftless is down so long that retained WAL exceeds `max_slot_wal_keep_size`, Postgres
    **invalidates the slot** to protect its own disk.
 5. On start, Driftless sees `wal_status = 'lost'` and stops with recovery steps: drop and recreate

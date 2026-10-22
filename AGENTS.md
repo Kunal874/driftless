@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T07 — Backfill** (tag `checkpoint/T07`) |
-| Next step | **T08.1**: spike: how to stop reading the replication stream (docs/BUILD_PLAN.md → T08) |
+| Last checkpoint | **T08 — Backpressure & WAL safety** (tag `checkpoint/T08`) |
+| Next step | **T09.1**: `src/metrics.ts` + `GET /metrics` (docs/BUILD_PLAN.md → T09) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

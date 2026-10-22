@@ -62,7 +62,8 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Router, lanes, batcher | FNV-1a routing, ordered lanes, natural batching ≤ batchMax (D-022) | `src/pipeline/lanes.ts` | T06 | ✅ |
 | Checkpointer | safe LSN = end of the unbroken run of applied transactions | `src/pipeline/checkpointer.ts` | T06 | ✅ |
 | Backfill | snapshot existing rows between watermarks, column-aware; progress saved + resumed (D-023, D-024, BUG-002/003) | `src/source/backfill.ts` | T07 | ✅ |
-| Backpressure | bounded queues, pause/resume the stream | `src/pipeline/lanes.ts` | T08 | 📐 |
+| Backpressure | pause the replication socket at the pending cap, resume at half; 10 s status re-send (D-025) | `src/pipeline/backpressure.ts`, `src/main.ts` | T08 | ✅ |
+| WAL safety | slot WAL capped at 1 GB (compose); refuse to start on a lost slot (D-026) | `docker-compose.yml`, `src/source/replication.ts` | T08 | ✅ |
 | Metrics | Prometheus endpoint, lag histogram | `src/metrics.ts` | T09 | 📐 |
 | Config | tables → index mapping, validation | `src/config.ts` | T10 | 📐 |
 
@@ -121,9 +122,10 @@ driftless/
 │   ├── config.ts             connection defaults, names, debug knob (T03)
 │   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07)
 │   ├── sinks/                document.ts, meilisearch.ts (T04)
-│   ├── pipeline/             lanes.ts, checkpointer.ts (T06)
+│   ├── pipeline/             lanes.ts, checkpointer.ts (T06), backpressure.ts (T08)
 │   └── metrics.ts            📐 T09
-├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05)
+├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05),
+│                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08)
 ├── docker/grafana/         📐 T09: dashboard provisioning
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md
