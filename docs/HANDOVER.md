@@ -11,7 +11,9 @@ Updated 2026-10-22, end of T04 (session 1). Overwrite this at every checkpoint: 
   chunks (`getDocuments({ ids })`), and finds extra documents. Exit 0 = OK, 1 = drift, 2 = couldn't check.
   Live: 100,000 rows vs 100,000 docs, **0 drift**, 4.7 s; with the connector stopped it exits 2 ("Is Driftless
   running?"). `--self-test` mode is in the same file.
-- Next step: **T05.2**: verify `--self-test` (planted 1 mismatched / 1 missing / 1 extra must all be found)
+  - T05.2 done: `node scripts/reconcile.ts --self-test` (connector running) planted mismatch #1, missing #3
+    and an extra doc → found exactly 1/1/1 → restored → drift 0 → **PASSED**.
+- Next step: **T05.3**: `connector` service in docker-compose.yml (so chaos can SIGKILL it)
 
 ## What the system holds right now
 

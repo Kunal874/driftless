@@ -195,7 +195,7 @@ after Meilisearch reports the write `succeeded`.
       `pg_current_wal_lsn()` and no enqueued/processing Meilisearch tasks). Then compare every row with
       its document via `document.ts` + a canonical hash, in primary-key ranges (make `id` filterable).
       Print missing / extra / mismatched counts with sample ids; exit 1 on any drift.
-- [ ] T05.2 Reconcile self-test: corrupt one document, delete one, add one extra → expect
+- [x] T05.2 Reconcile self-test: corrupt one document, delete one, add one extra → expect
       1 mismatched / 1 missing / 1 extra
 - [ ] T05.3 Compose service `connector` (`node:24` image, repo mounted, `depends_on` healthy) so tests can
       `docker compose kill -s SIGKILL connector`
