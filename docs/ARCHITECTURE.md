@@ -57,7 +57,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Stream + decoder | pgoutput messages → `Transaction`s of `Change`s | `src/source/decode.ts`, `src/main.ts` | T03 | ✅ |
 | Confirm protocol | ack handled txns at their exact end; idle confirms; keepalive replies (D-019) | `src/main.ts`, `src/source/lsn.ts` | T03 | ✅ (one txn at a time) |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | ✅ |
-| Meilisearch sink | per txn: merged upsert runs / delete runs / clear, each write waited to `succeeded` | `src/sinks/meilisearch.ts` | T04 | 🔨 |
+| Meilisearch sink | per txn: merged upsert runs / delete runs / clear, each write waited to `succeeded`; retry policy D-021 | `src/sinks/meilisearch.ts` | T04 | ✅ (one txn at a time) |
 | Reconcile + chaos | prove zero drift under crashes | `scripts/` | T05 | 📐 |
 | Router, lanes, batcher | parallel apply, per-key order, coalescing | `src/pipeline/lanes.ts` | T06 | 📐 |
 | Checkpointer | safe LSN = contiguous prefix of applied transactions | `src/pipeline/checkpointer.ts` | T04 → T06 | 📐 |
@@ -120,7 +120,8 @@ driftless/
 │   ├── main.ts               setup → stream → handle → confirm (T03)
 │   ├── config.ts             connection defaults, names, debug knob (T03)
 │   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts 📐 T07
-│   ├── pipeline/  sinks/     📐 T04+
+│   ├── sinks/                document.ts, meilisearch.ts (T04)
+│   ├── pipeline/             📐 T06
 │   └── metrics.ts            📐 T09
 ├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03); 📐 T05+: reconcile.ts, chaos.sh
 ├── docker/grafana/         📐 T09: dashboard provisioning

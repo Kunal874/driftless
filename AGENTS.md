@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T03 — Read the WAL** (tag `checkpoint/T03`) |
-| Next step | **T04.1**: Meilisearch index + row → document mapping (docs/BUILD_PLAN.md → T04) |
+| Last checkpoint | **T04 — Meilisearch sink, ack after apply** (tag `checkpoint/T04`) |
+| Next step | **T05.1**: `scripts/reconcile.ts` (docs/BUILD_PLAN.md → T05) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

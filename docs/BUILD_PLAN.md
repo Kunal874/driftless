@@ -59,7 +59,7 @@ atomicity inside the index. High availability (stretch S2).
 | T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | ✅ |
 | T02 | Source database & write workload | 1 | ✅ |
 | T03 | Read the WAL | 1–2 | ✅ |
-| T04 | Meilisearch sink, ack after apply | 2 | 🔨 |
+| T04 | Meilisearch sink, ack after apply | 2 | ✅ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ⬜ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ⬜ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ⬜ |
@@ -159,7 +159,7 @@ events grouped by transaction, and acknowledges progress manually.
 
 ---
 
-## T04 — Meilisearch sink, ack after apply 🔨
+## T04 — Meilisearch sink, ack after apply ✅
 
 **Goal:** every committed change lands in the `products` index, and an LSN is acknowledged only
 after Meilisearch reports the write `succeeded`.
@@ -173,7 +173,7 @@ after Meilisearch reports the write `succeeded`.
       still failing after N attempts → stop with an error naming the row (D-009).
 - [x] T04.4 Crash check: a debug knob that pauses between "task succeeded" and "ack"; SIGKILL during it
       → restart → replayed → index still correct
-- [ ] T04.5 Verify (TEST_CHECKLIST → T04), `learn/task-04-meilisearch-sink.md`, checkpoint
+- [x] T04.5 Verify (TEST_CHECKLIST → T04), `learn/task-04-meilisearch-sink.md`, checkpoint
 
 **Dependencies:** `meilisearch` (official JS client).
 

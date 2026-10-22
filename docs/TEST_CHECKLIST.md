@@ -58,13 +58,18 @@ Handy commands:
       replica identity full, protocol errors); `npm test` 10/10
 - [x] Library off-by-one (BUG-001) reproduced (library ack → next txn lost) and fixed (Driftless ack → re-sent)
 
-## T04 — Meilisearch sink, ack after apply
+## T04 — Meilisearch sink, ack after apply ✅ (verified 2026-10-22)
 
-- [ ] INSERT / UPDATE / DELETE show up in Meilisearch within about a second
-- [ ] Updating only `price_cents` on a row with a big description keeps the description in the document
-- [ ] Logs show the order: task enqueued → task `succeeded` → LSN acked
-- [ ] `docker compose stop meilisearch` during writes → no ack, retries with backoff; start it → catches up, nothing lost
-- [ ] A document Meilisearch keeps rejecting → connector stops with an error naming the row; no ack past it
+- [x] INSERT / UPDATE / DELETE show up in Meilisearch within about a second (~100 ms per transaction)
+- [x] Updating only `price_cents` on a row with a big description keeps the description in the document
+      (#10: 2,560 chars in row and doc)
+- [x] Logs show the order: `applied in N ms` (every task `succeeded`) → `confirmed <end LSN>`
+- [x] `docker compose stop meilisearch` during writes → no ack (slot unchanged for 10 s), 7 jittered retries;
+      start it → all 3 transactions applied within ~5 s, nothing lost
+- [x] A document Meilisearch keeps rejecting → stops with an error naming the xid and ids; no ack past it
+      (unit tests in `meilisearch.test.ts`: the products table can't produce a document Meilisearch rejects)
+- [x] Killed after apply, before ack → restart replays → document equals the row (stock 93, not 94)
+- [x] 100k-row re-seed streamed through the pipeline: indexed in 4.1 s, 100,000 rows = 100,000 documents
 
 ## T05 — Correctness harness
 

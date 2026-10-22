@@ -1,71 +1,53 @@
 # Handover — where we left off
 
-Updated 2026-10-22, end of T03 (session 1). Overwrite this at every checkpoint: it describes
+Updated 2026-10-22, end of T04 (session 1). Overwrite this at every checkpoint: it describes
 *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T03 — Read the WAL** (tag `checkpoint/T03`)
-- In progress: **T04**. T04.1 done: `meilisearch` 0.62.0 installed (14-day rule); `src/config.ts` has
-  Meilisearch settings + table → index; `src/sinks/document.ts` (row → document, D-020);
-  `ensureIndex()` in `src/sinks/meilisearch.ts` creates `products` with primary key `id`, idempotently
-  (verified). The connector still only prints + confirms; it doesn't write documents yet.
-- T04.2 done: `meilisearchSink().apply(txn)` (`planSteps`: consecutive same-kind changes → one write, merged
-  per key in order; delete/TRUNCATE never reordered; 10k-doc chunks), wired into `handle()` before
-  `confirm()`. Live: re-seed streamed TRUNCATE + 100k rows → indexed in 4.1 s; 100,000 rows = 100,000 docs;
-  11 sampled ids match exactly (incl. #10 keeping its 2,560-char description after a price-only update).
-  **Measured baseline:** ~100 ms per transaction (one Meilisearch task each) → ~10 txn/s max with one lane.
-  That's the reason for T06 batching across transactions.
-- T04.3 done: `submit()` retry policy (D-021): unavailable → retry forever with full-jitter backoff (≤ 30 s);
-  task failed → 3 tries then fail-stop naming xid + ids; HTTP 4xx → stop at once. 6 unit tests; `npm test` 21/21.
-- T04.4 done (verification only; the knob is `DRIFTLESS_DEBUG_ACK_DELAY_MS`, after apply, before confirm):
-  - Outage: `docker compose stop meilisearch`, 3 writes → slot unchanged for 10 s, 7 jittered retries
-    logged; Meilisearch back → all 3 applied within ~5 s; docs match, 100,000 = 100,000.
-  - Killed after apply, before ack (`stock = stock + 1` on #30) → slot unchanged; restart replays txn 6888 →
-    doc #30 stock 93 = Postgres (re-applying the value, not the +1, is why replay is harmless).
-- Next step: **T04.5**: checklist, `learn/task-04-meilisearch-sink.md`, checkpoint
+- Last checkpoint: **T04 — Meilisearch sink, ack after apply** (tag `checkpoint/T04`)
+- In progress: nothing
+- Next step: **T05.1**: `scripts/reconcile.ts` (BUILD_PLAN.md → T05)
 
 ## What the system holds right now
 
-- `products`: 100,000 rows (re-seeded during T03, plus a few test edits to ids 1–6 and 10).
-- Publication `driftless_pub` (insert/update/delete/truncate) and slot `driftless_slot`, recreated fresh
-  in T03.6 and fully caught up (`confirmed_flush_lsn` = server WAL position `0/9F1E0A8`).
-- Meilisearch: index `products` (primary key `id`), in sync with Postgres (100,000 docs, T04.2).
+- `products`: 100,000 rows (re-seeded in T04.2, plus a few test edits: ids 1, 6, 10, 20, 30 changed, 2 and
+  21 deleted, 100001–100002 inserted).
+- Meilisearch index `products` (primary key `id`): **in sync** with Postgres (100,000 = 100,000; sampled ids identical).
+- Publication `driftless_pub` + slot `driftless_slot`, caught up; no connector running.
 
 ## Done so far
 
 - **T01 Foundation ✅**: repo, single-author hook, Docker stack, docs, plan.
 - **T02 Source data ✅**: schema, deterministic seed, workload runner, unchanged-TOAST proof.
-- **T03 Read the WAL ✅**: Node 24 + TypeScript 7 with no build step; startup checks + idempotent
-  publication/slot; decoder (`Transaction` of `Change`s; unchanged TOAST omitted, NULL kept; key change →
-  delete + insert; TRUNCATE handled); confirm protocol D-019 (ack after handling at the exact end position,
-  idle confirms, keepalive replies, own queue). **BUG-001** found by reading the library's source, reproduced
-  (`scripts/repro-ack-off-by-one.ts`) and fixed. Verified: kill-before-ack replay, idle slot advance, fresh
-  start. `npm test` 10/10.
+- **T03 Read the WAL ✅**: decoder, confirm protocol (D-019), BUG-001 (library ack +1) reproduced and fixed.
+- **T04 Meilisearch sink ✅**: `ensureIndex` (explicit primary key), `toDocument` (D-020), `planSteps` (same-kind
+  runs merged per key, never reordered across deletes/TRUNCATE, 10k chunks), ack after every write
+  `succeeded`, retry policy D-021 (wait out outages with full-jitter backoff; 3 tries then fail-stop on
+  rejections). Live: 100k rows through the stream in 4.1 s; outage → no confirm, retries, full catch-up;
+  kill after apply → replay is harmless. `npm test` 21/21.
 
-## Notes for T04 (read before starting)
+## Notes for T05 (read before starting)
 
-- The sink goes into `handle(txn)` in `src/main.ts`: apply → wait until the Meilisearch task `succeeded` →
-  *then* `confirm(...)`. Keep that order (invariant 1).
-- `row` holds only the columns that were sent. Unchanged TOAST columns are absent, so use
-  `updateDocuments` (merge), never `addDocuments` (replace).
-- `truncate` changes must remove all of that table's documents (D-018).
-- Value types: `id` arrives as a **string** (`'10'`), `updated_at` as a `Date`. Decide the document shape
-  in `document.ts` (it becomes the reconcile reference in T05).
-- Install `meilisearch` with the 14-day rule (D-017): `npm install --before="$(date -d '-14 days' +%F)" meilisearch`.
-- Rows that existed before the slot are not streamed (backfill is T07). To get every row through the
-  pipeline before then, re-seed **after** the slot exists: `db/seed.sql` truncates and re-inserts, and all of
-  it streams (one truncate + one 100k-row transaction).
-- While `handle` waits on a slow Meilisearch, keepalive replies keep the connection alive (the socket isn't
-  paused), so long retries are fine. Bounding memory is T08.
+- **Throughput today is ~10 transactions/s** (one transaction at a time, ~100 ms per Meilisearch task).
+  `scripts/workload.sh` at 200 tx/s will build a big backlog. Until T06, run chaos with a low rate (e.g.
+  `scripts/workload.sh 5 …`) or expect a long drain before reconcile.
+- Reconcile must use `toDocument()` from `src/sinks/document.ts` on rows from a normal `SELECT` (same `pg` type
+  parsing as the stream). That's how the T04 spot checks matched exactly: sort keys, then compare JSON.
+- "Caught up" = slot `confirmed_flush_lsn` ≥ `pg_current_wal_lsn()` (the idle confirm gets there within a few
+  seconds) **and** no `enqueued`/`processing` Meilisearch tasks.
+- Ids are strings in Meilisearch (D-020), so there are no numeric range filters. Compare by fetching documents
+  for each chunk of Postgres ids (check the client for a fetch-by-ids option), and find *extra* documents by
+  paging through all documents.
+- The debug knob `DRIFTLESS_DEBUG_ACK_DELAY_MS` sits after apply and before confirm. The chaos script doesn't
+  need it: SIGKILL at random moments is the point.
 
-## Files changed in T03
+## Files changed in T04
 
-`package.json`, `package-lock.json`, `tsconfig.json`, `src/config.ts`, `src/main.ts`,
-`src/source/{replication,decode,lsn}.ts`, `src/source/{decode,lsn}.test.ts`,
-`scripts/repro-ack-off-by-one.ts`, `docs/bugs/BUG-001-library-ack-off-by-one.md`, `docs/` (DECISIONS
-D-017…D-019, BUILD_PLAN, ARCHITECTURE, FLOW, TEST_CHECKLIST), `AGENTS.md` status,
-`learn/task-03-reading-the-wal.md`
+`package.json`, `package-lock.json` (meilisearch 0.62.0), `src/config.ts`, `src/main.ts`,
+`src/sinks/document.ts`, `src/sinks/meilisearch.ts`, `src/sinks/meilisearch.test.ts`, `docs/` (DECISIONS
+D-020, D-021, BUILD_PLAN, ARCHITECTURE, FLOW, TEST_CHECKLIST), `AGENTS.md` status,
+`learn/task-04-meilisearch-sink.md`
 
 ## Environment (verified 2026-10-22)
 

@@ -5,7 +5,10 @@ Each step lists **where it can break**. When something goes wrong, find the step
 
 ---
 
-## Flow 1 — One row change, end to end · 🔨 steps 1–4 and 9 built in T03 (sink: T04, lanes: T06)
+## Flow 1 — One row change, end to end · 🔨 steps 1–4, 7, 9 built (T03–T04); lanes + cross-transaction batching (5, 6, 8): T06
+
+Today (T04) the pipeline is one lane: each transaction is applied (step 7, writes merged within the
+transaction) and confirmed before the next one starts.
 
 1. The app runs `UPDATE products SET price_cents = 999 WHERE id = 42` and commits.
    - *Can break:* a table without a primary key. Once it's in a publication, Postgres
