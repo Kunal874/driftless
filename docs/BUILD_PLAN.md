@@ -58,7 +58,7 @@ atomicity inside the index. High availability (stretch S2).
 |---|---|---|---|
 | T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | ✅ |
 | T02 | Source database & write workload | 1 | ✅ |
-| T03 | Read the WAL | 1–2 | 🔨 |
+| T03 | Read the WAL | 1–2 | ✅ |
 | T04 | Meilisearch sink, ack after apply | 2 | ⬜ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ⬜ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ⬜ |
@@ -118,7 +118,7 @@ later task has something to sync and something to stress it with.
 
 ---
 
-## T03 — Read the WAL 🔨
+## T03 — Read the WAL ✅
 
 **Goal:** a Node/TypeScript process that streams committed row changes, prints them as typed
 events grouped by transaction, and acknowledges progress manually.
@@ -141,7 +141,7 @@ events grouped by transaction, and acknowledges progress manually.
       keepalive positions so the slot keeps advancing while only *other* tables change.
 - [x] T03.5 Vitest unit tests for the decoder, with recorded messages as fixtures (insert / update /
       delete / unchanged-TOAST column)
-- [ ] T03.6 Verify (TEST_CHECKLIST → T03), `learn/task-03-reading-the-wal.md`, checkpoint
+- [x] T03.6 Verify (TEST_CHECKLIST → T03), `learn/task-03-reading-the-wal.md`, checkpoint
 
 **Dependencies:** `pg`, `pg-logical-replication`; dev: `typescript`, `@types/node`, `@types/pg`, `vitest`.
 
@@ -284,6 +284,9 @@ First reproduce the naive race, then fix it (D-008).
 
 **Pitfalls**
 - Pausing in the wrong layer just moves the buffering into the library.
+- `pg-logical-replication` 2.5's `flowControl` does pause the socket, but its keepalives bypass its queue
+  (D-019). If you use it, keep Driftless's own idle check. While the socket is paused, keepalive requests
+  aren't read, so send periodic status updates yourself or `wal_sender_timeout` (60 s) drops the connection.
 - Without hysteresis, pause/resume thrashes.
 - An invalidated slot means changes were lost for the sink. Never "just continue".
 

@@ -1,73 +1,56 @@
 # Handover — where we left off
 
-Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: it describes
+Updated 2026-10-22, end of T03 (session 1). Overwrite this at every checkpoint: it describes
 *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T02 — Source database & workload** (tag `checkpoint/T02`)
-- In progress: **T03**. T03.1 done: `package.json` (pg 8.23.1, pg-logical-replication 2.5.0;
-  dev: typescript 7.0.2, vitest 5.0.3, @types/node 24, @types/pg), `tsconfig.json`, `src/config.ts`.
-  `npm run typecheck` passes; `node src/*.ts` runs with no build step.
-- T03.2 done: `src/source/replication.ts` checks `wal_level`, the primary key and replica identity, then
-  creates `driftless_pub` (publishes truncate too, D-018) and `driftless_slot` (pgoutput) only if
-  missing. Verified idempotent; clear errors for a missing table or a table without a primary key.
-  **The slot now exists** (created at `0/71F31D8`) and retains WAL until Driftless acks.
-- T03.3 done: `src/source/decode.ts` (pgoutput → `Transaction` of `Change`s) and `src/main.ts` (setup,
-  stream, print). Verified on real changes: insert; price-only update of #10 arrives **without**
-  `description` (unchanged TOAST omitted); delete; 3-row txn grouped; truncate; 100k-row seed txn.
-  **No acks yet by design**, so every start replays everything since the slot was created
-  (`confirmed_flush_lsn` still `0/71F31D8`, 43 MB retained).
-- T03.4 done: confirm protocol in `src/main.ts` (D-019) + `src/source/lsn.ts` (+ tests).
-  **BUG-001 reproduced and fixed**: the library's `acknowledge()` adds 1, which can skip the next
-  transaction after a restart (`scripts/repro-ack-off-by-one.ts`, `docs/bugs/BUG-001-…`). Verified: kill
-  inside the ack window → slot unchanged; restart re-delivers only the un-acked txn; idle connector
-  advances the slot to the server's WAL position. Note: the repro script fast-forwards the slot with
-  `pg_replication_slot_advance`, so the T03.3 test changes were skipped (test data only).
-- T03.5 done: `src/source/decode.test.ts`, 7 cases (grouping/order, unchanged TOAST vs NULL, REPLICA
-  IDENTITY FULL, primary-key change, refusing a key change that would lose TOAST values, TRUNCATE,
-  protocol errors). `npm test`: 10/10 pass.
-- Next step: **T03.6**: run the T03 checklist, write `learn/task-03-reading-the-wal.md`, checkpoint
+- Last checkpoint: **T03 — Read the WAL** (tag `checkpoint/T03`)
+- In progress: nothing
+- Next step: **T04.1**: create the Meilisearch `products` index (explicit primary key `id`) and
+  `src/sinks/document.ts` (row → document), see BUILD_PLAN.md → T04
 
-## pg-logical-replication 2.5.0: what reading its source showed (T03.1)
+## What the system holds right now
 
-`node_modules/pg-logical-replication/dist/logical-replication-service.js`:
-1. `acknowledge.auto` defaults to **true**: every message is acked on *receipt* (at-most-once).
-2. `acknowledge.timeoutSeconds` defaults to **10**: a timer acks the last **received** LSN, *even with
-   auto = false*. Must be set to 0; we answer keepalive requests ourselves.
-3. `acknowledge(lsn)` sends **lsn + 1**. Postgres expects an end position, so passing a commit's end LSN
-   over-reports by 1 byte. After a restart, that can make Postgres skip the next transaction if its
-   commit record starts exactly there. We pass `end − 1` (to verify in T03.4 → docs/bugs).
-4. With `flowControl` on, keepalives bypass the library's queue, so an "idle" ack could cover queued,
-   unhandled transactions. T03 uses its own queue instead.
-
-## What the database holds right now
-
-- `products`: 99,965 rows (seeded 100,000, then one 30 s workload run). Re-seed any time with
-  `db/seed.sql` and you get identical data.
-- Publication `driftless_pub` and slot `driftless_slot` exist (since T03.2). Meilisearch: no indexes.
+- `products`: 100,000 rows (re-seeded during T03, plus a few test edits to ids 1–6 and 10).
+- Publication `driftless_pub` (insert/update/delete/truncate) and slot `driftless_slot`, recreated fresh
+  in T03.6 and fully caught up (`confirmed_flush_lsn` = server WAL position `0/9F1E0A8`).
+- Meilisearch: no indexes yet.
 
 ## Done so far
 
-- **T01 Foundation ✅**: repo, single-author hook, Docker stack, docs, build plan.
-- **T02 Source data ✅**: schema (`description` STORAGE EXTERNAL); deterministic seed (100k rows in
-  1.9 s, 5,132 big descriptions, identical checksum across runs); workload runner (200 tx/s, 0 failed,
-  60/20/10/10 mix); proof that a price-only update of a big row decodes as `unchanged-toast-datum`.
+- **T01 Foundation ✅**: repo, single-author hook, Docker stack, docs, plan.
+- **T02 Source data ✅**: schema, deterministic seed, workload runner, unchanged-TOAST proof.
+- **T03 Read the WAL ✅**: Node 24 + TypeScript 7 with no build step; startup checks + idempotent
+  publication/slot; decoder (`Transaction` of `Change`s; unchanged TOAST omitted, NULL kept; key change →
+  delete + insert; TRUNCATE handled); confirm protocol D-019 (ack after handling at the exact end position,
+  idle confirms, keepalive replies, own queue). **BUG-001** found by reading the library's source, reproduced
+  (`scripts/repro-ack-off-by-one.ts`) and fixed. Verified: kill-before-ack replay, idle slot advance, fresh
+  start. `npm test` 10/10.
 
-## Notes for T03 (read before starting)
+## Notes for T04 (read before starting)
 
-- Decide how to handle **TRUNCATE** (BUILD_PLAN T03 pitfalls). `db/seed.sql` truncates before seeding.
-- The unchanged-TOAST marker is real and frequent: 60% of workload writes are price-only updates. The
-  decoder's test fixtures (T03.5) must include it.
-- To peek at decoded changes without code, use a temporary `test_decoding` slot (learn/task-02 §3).
-  Always check `pg_replication_slots` is clean afterwards.
-- Node connects from the host to `127.0.0.1:5440`, user/password `driftless`, database `shop`.
+- The sink goes into `handle(txn)` in `src/main.ts`: apply → wait until the Meilisearch task `succeeded` →
+  *then* `confirm(...)`. Keep that order (invariant 1).
+- `row` holds only the columns that were sent. Unchanged TOAST columns are absent, so use
+  `updateDocuments` (merge), never `addDocuments` (replace).
+- `truncate` changes must remove all of that table's documents (D-018).
+- Value types: `id` arrives as a **string** (`'10'`), `updated_at` as a `Date`. Decide the document shape
+  in `document.ts` (it becomes the reconcile reference in T05).
+- Install `meilisearch` with the 14-day rule (D-017): `npm install --before="$(date -d '-14 days' +%F)" meilisearch`.
+- Rows that existed before the slot are not streamed (backfill is T07). To get every row through the
+  pipeline before then, re-seed **after** the slot exists: `db/seed.sql` truncates and re-inserts, and all of
+  it streams (one truncate + one 100k-row transaction).
+- While `handle` waits on a slow Meilisearch, keepalive replies keep the connection alive (the socket isn't
+  paused), so long retries are fine. Bounding memory is T08.
 
-## Files changed in T02
+## Files changed in T03
 
-`db/init/01-schema.sql`, `db/seed.sql`, `db/workload/*.sql`, `scripts/workload.sh`,
-`docker-compose.yml` (mounts), `docs/` (BUILD_PLAN, HANDOVER, ARCHITECTURE, CONSTRAINTS rule 13,
-DECISIONS D-016, TEST_CHECKLIST), `AGENTS.md` status, `learn/task-02-source-data.md`
+`package.json`, `package-lock.json`, `tsconfig.json`, `src/config.ts`, `src/main.ts`,
+`src/source/{replication,decode,lsn}.ts`, `src/source/{decode,lsn}.test.ts`,
+`scripts/repro-ack-off-by-one.ts`, `docs/bugs/BUG-001-library-ack-off-by-one.md`, `docs/` (DECISIONS
+D-017…D-019, BUILD_PLAN, ARCHITECTURE, FLOW, TEST_CHECKLIST), `AGENTS.md` status,
+`learn/task-03-reading-the-wal.md`
 
 ## Environment (verified 2026-10-22)
 
@@ -83,9 +66,14 @@ DECISIONS D-016, TEST_CHECKLIST), `AGENTS.md` status, `learn/task-02-source-data
 
 - Git Bash rewrites container paths: `docker compose exec … -f /db/…` needs `MSYS_NO_PATHCONV=1`
   (scripts set it themselves).
+- Git Bash's `kill` doesn't reliably kill a Windows `node.exe`. For a SIGKILL-style test use
+  `taskkill //F //PID "$(cat /proc/$PID/winpid)"`. **Never** `taskkill /IM node.exe`: it would also kill the
+  AI tool.
+- For agents: `cd` in a Bash call persists across calls. Start commands with `cd /d/PROJECTS/driftless`.
 - Docker Desktop may be stopped at session start. Start it before `docker compose up -d --wait`.
-- Init scripts in `db/init/` only run on an **empty** volume. Changing the schema later means
-  `docker compose down -v` (wipes all data; ask first) or a manual migration.
+- Init scripts in `db/init/` only run on an **empty** volume (`docker compose down -v` wipes data; ask first).
+- BUG-001 could be reported upstream to `kibae/pg-logical-replication`. That's the owner's decision
+  (outward-facing); the repro script and note are ready.
 
 ## Resume prompt
 

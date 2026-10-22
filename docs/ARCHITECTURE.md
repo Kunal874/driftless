@@ -54,7 +54,8 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Dev stack | Postgres (logical WAL) + Meilisearch, local only | `docker-compose.yml` | T01 | ✅ |
 | Demo source data | `products` schema, seed, random write workload | `db/`, `scripts/workload.sh` | T02 | ✅ |
 | Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | ✅ |
-| Stream + decoder | pgoutput messages → `Transaction`s of `Change`s | `src/source/decode.ts`, `src/main.ts` | T03 | 🔨 |
+| Stream + decoder | pgoutput messages → `Transaction`s of `Change`s | `src/source/decode.ts`, `src/main.ts` | T03 | ✅ |
+| Confirm protocol | ack handled txns at their exact end; idle confirms; keepalive replies (D-019) | `src/main.ts`, `src/source/lsn.ts` | T03 | ✅ (one txn at a time) |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | 📐 |
 | Meilisearch sink | upsert / delete documents, wait for task success | `src/sinks/meilisearch.ts` | T04 | 📐 |
 | Reconcile + chaos | prove zero drift under crashes | `scripts/` | T05 | 📐 |
@@ -108,18 +109,20 @@ driftless/
 ├── CLAUDE.md               makes Claude Code load AGENTS.md
 ├── README.md               📐 T10: overview + quick start
 ├── docker-compose.yml      local stack (connector service added in T05, Prometheus/Grafana in T09)
-├── package.json            📐 T03: scripts + dependencies
-├── tsconfig.json           📐 T03: type-check only (Node 24 runs .ts files directly)
+├── package.json            scripts + dependencies (T03)
+├── tsconfig.json           type-check only; Node 24 runs .ts files directly (T03)
 ├── .githooks/commit-msg    single-author guard (CONSTRAINTS rule 1)
 ├── db/                     all SQL (T02)
 │   ├── init/01-schema.sql    runs automatically on a fresh Postgres volume
 │   ├── seed.sql              generates N demo rows
 │   └── workload/*.sql        pgbench scripts: random updates / inserts / deletes
-├── src/                    📐 T03+: the connector (tests sit next to code as *.test.ts)
-│   ├── main.ts
-│   ├── source/  pipeline/  sinks/
-│   └── metrics.ts
-├── scripts/                workload.sh (T02: the one write workload); 📐 T05+: reconcile.ts, chaos.sh
+├── src/                    the connector (tests sit next to code as *.test.ts)
+│   ├── main.ts               setup → stream → handle → confirm (T03)
+│   ├── config.ts             connection defaults, names, debug knob (T03)
+│   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts 📐 T07
+│   ├── pipeline/  sinks/     📐 T04+
+│   └── metrics.ts            📐 T09
+├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03); 📐 T05+: reconcile.ts, chaos.sh
 ├── docker/grafana/         📐 T09: dashboard provisioning
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md

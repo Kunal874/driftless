@@ -42,15 +42,21 @@ Handy commands:
 - [x] A price-only UPDATE of a big row decodes as `description[text]:unchanged-toast-datum`, while a small
       row's description is sent in full (temporary `test_decoding` slot; 0 slots left afterwards)
 
-## T03 — Read the WAL
+## T03 — Read the WAL ✅ (verified 2026-10-22)
 
-- [ ] Connector start creates `driftless_pub` and `driftless_slot` if missing; a second start doesn't error
-- [ ] One INSERT, one UPDATE and one DELETE each print exactly one event (op, pk, commitLsn, commitTime)
-- [ ] A multi-row transaction prints as one group, in order
-- [ ] Kill before ack → on restart the un-acked transaction is printed again; acked ones are not
-- [ ] Writing only to a table *outside* the publication for 1 min still advances the slot's
-      `confirmed_flush_lsn` (keepalive ack)
-- [ ] Decoder unit tests cover insert / update / delete / unchanged-TOAST column
+- [x] Connector start creates `driftless_pub` and `driftless_slot` if missing; a second start doesn't error
+      (fresh start after dropping both: recreated, publication includes truncate)
+- [x] One INSERT, one UPDATE and one DELETE each print exactly one event (op, pk, commit end LSN, commit
+      time); the price-only UPDATE of #10 arrives without `description` (unchanged TOAST omitted)
+- [x] A multi-row transaction prints as one group, in order (3-row UPDATE → 1 txn, 3 changes; 100k-row
+      seed → 1 txn)
+- [x] Kill before ack → on restart the un-acked transaction is printed again; acked ones are not
+      (`DRIFTLESS_DEBUG_ACK_DELAY_MS=8000` + `taskkill /F`; slot unchanged after the kill)
+- [x] Writing only to a table *outside* the publication still advances the slot's `confirmed_flush_lsn`
+      (keepalive confirm: `0/9D69C90` → `0/9F0A7D0`, equal to the server's WAL position)
+- [x] Decoder unit tests cover insert / update / delete / unchanged-TOAST column (+ key change, TRUNCATE,
+      replica identity full, protocol errors); `npm test` 10/10
+- [x] Library off-by-one (BUG-001) reproduced (library ack → next txn lost) and fixed (Driftless ack → re-sent)
 
 ## T04 — Meilisearch sink, ack after apply
 
