@@ -59,7 +59,7 @@ atomicity inside the index. High availability (stretch S2).
 | T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | ✅ |
 | T02 | Source database & write workload | 1 | ✅ |
 | T03 | Read the WAL | 1–2 | ✅ |
-| T04 | Meilisearch sink, ack after apply | 2 | ⬜ |
+| T04 | Meilisearch sink, ack after apply | 2 | 🔨 |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ⬜ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ⬜ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ⬜ |
@@ -159,12 +159,12 @@ events grouped by transaction, and acknowledges progress manually.
 
 ---
 
-## T04 — Meilisearch sink, ack after apply ⬜
+## T04 — Meilisearch sink, ack after apply 🔨
 
 **Goal:** every committed change lands in the `products` index, and an LSN is acknowledged only
 after Meilisearch reports the write `succeeded`.
 
-- [ ] T04.1 Create index `products` with explicit primary key `id` if missing. `src/sinks/document.ts`
+- [x] T04.1 Create index `products` with explicit primary key `id` if missing. `src/sinks/document.ts`
       maps row → document; it's the single source of truth, reused by reconcile in T05.
 - [ ] T04.2 `src/sinks/meilisearch.ts`: insert/update → `updateDocuments` (merge: keeps fields we didn't
       receive); delete → `deleteDocuments([id])`. Omit unchanged-TOAST columns; never write them as null.

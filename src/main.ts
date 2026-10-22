@@ -1,9 +1,14 @@
 import pg from 'pg';
+import { Meilisearch } from 'meilisearch';
 import { LogicalReplicationService, PgoutputPlugin, type Pgoutput } from 'pg-logical-replication';
 import * as config from './config.ts';
 import { ensureReplicationSetup } from './source/replication.ts';
 import { transactionAssembler, type Transaction } from './source/decode.ts';
 import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
+import { ensureIndex } from './sinks/meilisearch.ts';
+
+const meili = new Meilisearch(config.meilisearch);
+await ensureIndex(meili, config.index.uid, config.index.primaryKey);
 
 const db = new pg.Client(config.pgConfig);
 await db.connect();

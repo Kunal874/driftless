@@ -25,6 +25,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-017 | New dependency versions must be at least 14 days old | Accepted | T03 |
 | D-018 | TRUNCATE is streamed and handled, not filtered out | Accepted | T03 |
 | D-019 | The confirm protocol: exact end positions, idle confirms, own queue | Accepted | T03 |
+| D-020 | Document shape: exact string ids, ISO dates, partial docs merged | Accepted | T04 |
 
 ---
 
@@ -201,3 +202,15 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   transaction and not the acked one; an idle connector advanced the slot to the server's exact WAL position.
 - **Consequences:** T08 must bound the queue and pause the socket itself. While the socket is paused,
   keepalive requests aren't read, so T08 must also send periodic status updates.
+
+### D-020 — Document shape: exact string ids, ISO dates, partial docs merged
+- **Decision:** `src/sinks/document.ts` is the only row → document mapping. The index's primary key is
+  `id`, and its value is the primary key **as a string** (`'10'`), exactly as `pg` delivers `bigint`.
+  Dates become ISO-8601 strings. A row missing unchanged-TOAST columns gives a partial document, written
+  with `updateDocuments`, which merges into the stored document.
+- **Why:** strings keep 64-bit ids exact (JSON numbers are only exact up to 2⁵³), and Meilisearch accepts
+  string ids. One mapping means the sink and reconcile (T05) can never disagree about what "correct" looks like.
+- **Rejected:** numeric ids (precision risk for big keys); `addDocuments` (it *replaces* documents, so a
+  partial row would wipe the description).
+- **Consequences:** range filters on `id` would need a numeric copy of the field; reconcile compares by
+  fetching documents by id instead.

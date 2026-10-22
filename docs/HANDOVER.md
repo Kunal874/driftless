@@ -6,16 +6,18 @@ Updated 2026-10-22, end of T03 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T03 — Read the WAL** (tag `checkpoint/T03`)
-- In progress: nothing
-- Next step: **T04.1**: create the Meilisearch `products` index (explicit primary key `id`) and
-  `src/sinks/document.ts` (row → document), see BUILD_PLAN.md → T04
+- In progress: **T04**. T04.1 done: `meilisearch` 0.62.0 installed (14-day rule); `src/config.ts` has
+  Meilisearch settings + table → index; `src/sinks/document.ts` (row → document, D-020);
+  `ensureIndex()` in `src/sinks/meilisearch.ts` creates `products` with primary key `id`, idempotently
+  (verified). The connector still only prints + confirms; it doesn't write documents yet.
+- Next step: **T04.2**: the sink: merge updates, deletes, truncate → clear, wired into `handle()`
 
 ## What the system holds right now
 
 - `products`: 100,000 rows (re-seeded during T03, plus a few test edits to ids 1–6 and 10).
 - Publication `driftless_pub` (insert/update/delete/truncate) and slot `driftless_slot`, recreated fresh
   in T03.6 and fully caught up (`confirmed_flush_lsn` = server WAL position `0/9F1E0A8`).
-- Meilisearch: no indexes yet.
+- Meilisearch: index `products` (primary key `id`), empty.
 
 ## Done so far
 
