@@ -56,7 +56,7 @@ atomicity inside the index. High availability (stretch S2).
 
 | Task | Name | Week | Status |
 |---|---|---|---|
-| T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | 🔨 |
+| T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | ✅ |
 | T02 | Source database & write workload | 1 | ⬜ |
 | T03 | Read the WAL | 1–2 | ⬜ |
 | T04 | Meilisearch sink, ack after apply | 2 | ⬜ |
@@ -70,7 +70,7 @@ atomicity inside the index. High availability (stretch S2).
 
 ---
 
-## T01 — Foundation 🔨
+## T01 — Foundation ✅
 
 **Goal:** a repo where work can't get lost or mis-attributed, a running local stack, and a plan
 any session can resume from.
@@ -81,7 +81,7 @@ any session can resume from.
       Meilisearch 1.54.3 (127.0.0.1:7700), healthchecks; verified
 - [x] T01.3 Project docs: ARCHITECTURE, FLOW, DECISIONS, CONSTRAINTS, TEST_CHECKLIST, ROLLBACK
 - [x] T01.4 This build plan + AGENTS.md + CLAUDE.md + HANDOVER.md
-- [ ] T01.5 `learn/task-01-foundation.md`, final HANDOVER, Status block, tag `checkpoint/T01`
+- [x] T01.5 `learn/task-01-foundation.md`, final HANDOVER, Status block, tag `checkpoint/T01`
 
 ---
 
