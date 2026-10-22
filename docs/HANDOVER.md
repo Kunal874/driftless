@@ -9,7 +9,12 @@ Updated 2026-10-23, end of T07 (session 1). Overwrite this at every checkpoint: 
 - In progress: **T08**. T08.1 done (spike, D-025): pause `service._connection.stream` (the `net.Socket` pg reads
   via `'data'` events) at a pending-work cap, resume at half; re-send the confirmed position every 10 s
   (`wal_sender_timeout` is 1 min). Found: `max_slot_wal_keep_size` is −1 (unlimited) on this stack.
-- Next step: **T08.2**: implement the bound + hysteresis + status timer in `src/main.ts`, with tests
+  T08.2 done: `src/pipeline/backpressure.ts` (`nextReadState`, + 2 tests) and in `main.ts` the socket pause/resume
+  (cap `DRIFTLESS_MAX_PENDING`, default 50,000; resume at half), a 10 s status re-send, and a stats line while paused.
+  `scripts/slow-sink.sh PAUSE_S RATE MAX_PENDING`. Verified `slow-sink.sh 90 200 2000`: paused at exactly 2,000; memory
+  flat ~42 MiB for the 90 s freeze; WAL held for the slot 0.8 → 8.2 MB; **0 fatal** (survived > 60 s
+  `wal_sender_timeout`); 0 drift. `npm test` 44/44.
+- Next step: **T08.3**: 5-min freeze at 600 tx/s, cap 50,000 vs unbounded, comparing memory
 
 ## What the system holds right now
 

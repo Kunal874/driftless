@@ -36,6 +36,13 @@ if (!(Number.isInteger(lanes) && lanes >= 1 && Number.isInteger(batchMax) && bat
   throw new Error(`DRIFTLESS_LANES and DRIFTLESS_BATCH_MAX must be whole numbers ≥ 1 (got ${lanes}, ${batchMax})`);
 }
 
+// Backpressure (T08, D-025): stop reading the stream once this many changes are waiting inside Driftless
+// (stream messages not yet dispatched + changes queued in lanes); resume at half.
+export const maxPending = Number(process.env.DRIFTLESS_MAX_PENDING ?? 50_000);
+if (!(Number.isInteger(maxPending) && maxPending >= 2)) {
+  throw new Error(`DRIFTLESS_MAX_PENDING must be a whole number ≥ 2 (got ${maxPending})`);
+}
+
 // Backfill (T07): index the rows that existed before Driftless started, while streaming continues.
 export const backfill = {
   // 1 = start a backfill on start (resumed instead if one was interrupted). Without it, one starts by itself

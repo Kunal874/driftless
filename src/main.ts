@@ -10,8 +10,10 @@ import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
 import { createBackfill, readBackfillState } from './source/backfill.ts';
+import { nextReadState } from './pipeline/backpressure.ts';
 
 const STATS_EVERY_MS = 5_000;
+const STATUS_EVERY_MS = 10_000; // well under Postgres's wal_sender_timeout (1 min)
 
 const meili = new Meilisearch(config.meilisearch);
 await ensureIndex(meili, config.index.uid, config.index.primaryKey);
@@ -37,7 +39,10 @@ const lanes = createLanes({
     stats.changes += changes.length;
     stats.writes++;
   },
-  onApplied: () => void confirmApplied().catch(fail),
+  onApplied: () => {
+    void confirmApplied().catch(fail);
+    applyBackpressure();
+  },
   onError: fail,
 });
 
@@ -53,16 +58,37 @@ const backfill = createBackfill({
 });
 
 const assemble = transactionAssembler();
-const queue: Pgoutput.Message[] = []; // ponytail: unbounded; bounded + paused stream in T08
+const queue: Pgoutput.Message[] = []; // bounded by backpressure below (D-025)
 let draining = false;
+let readingPaused = false;
 let txnOpen = false; // a BEGIN has been handled but its transaction isn't dispatched yet
 let confirming = 0; // confirms in progress (including the crash-test delay)
 let confirmed = lsnToBigInt(startLsn); // everything before this WAL position is applied
 
 service.on('data', (_lsn: string, msg: Pgoutput.Message) => {
   queue.push(msg); // synchronous, so a later keepalive always sees this message as pending
+  applyBackpressure();
   void drain();
 });
+
+// Backpressure (D-025). When too much work is waiting inside Driftless, stop reading the replication socket:
+// unread data fills the kernel buffer, TCP stops Postgres's sender, and Postgres keeps the WAL. Nothing is lost.
+// The library has no public pause, so this reaches its connection's socket, checked at runtime.
+function applyBackpressure(): void {
+  const next = nextReadState(queue.length + lanes.queued(), readingPaused, config.maxPending);
+  if (!next) return;
+  const socket = (service as unknown as { _connection?: { stream?: { pause(): void; resume(): void } } })._connection?.stream;
+  if (!socket) throw new Error('pg-logical-replication internals changed: no _connection.stream to pause');
+  readingPaused = next === 'pause';
+  if (readingPaused) socket.pause();
+  else socket.resume();
+  console.log(`driftless: ${readingPaused ? 'paused' : 'resumed'} reading the stream (${queue.length + lanes.queued()} changes waiting)`);
+}
+
+// While reading is paused, Postgres's "are you there?" requests go unread, so re-send the confirmed position
+// regularly, or Postgres drops the connection after wal_sender_timeout. (The library's own timer stays off:
+// it would send the *received* position, D-019.)
+setInterval(() => void sendStatus(confirmed).catch(fail), STATUS_EVERY_MS).unref();
 
 service.on('heartbeat', (walEnd: string, _time: number, replyRequested: boolean) => {
   // Idle = every message received so far is applied and confirmed. The stream arrives in order, so the
@@ -160,10 +186,11 @@ function describe(txn: Transaction): string {
 }
 
 setInterval(() => {
-  if (stats.txns === 0 && stats.changes === 0) return;
+  if (stats.txns === 0 && stats.changes === 0 && !readingPaused) return;
   const perWrite = stats.writes > 0 ? Math.round(stats.changes / stats.writes) : 0;
   console.log(`driftless: +${stats.txns} txns, ${stats.changes} changes applied in ${stats.writes} writes ` +
-    `(${perWrite}/write); ${checkpointer.inFlight} txns in flight; confirmed ${bigIntToLsn(confirmed)}`);
+    `(${perWrite}/write); ${checkpointer.inFlight} txns in flight; ${queue.length + lanes.queued()} changes waiting` +
+    `${readingPaused ? ' (reading paused)' : ''}; confirmed ${bigIntToLsn(confirmed)}`);
   stats = { txns: 0, changes: 0, writes: 0 };
 }, STATS_EVERY_MS).unref();
 

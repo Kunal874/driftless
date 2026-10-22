@@ -281,7 +281,7 @@ First reproduce the naive race, then fix it (D-008).
 
 - [x] T08.1 Spike: find how to stop reading the replication stream (a library API, or pausing the
       underlying socket so TCP backpressure stops the WAL sender). Record the mechanism in DECISIONS.md.
-- [ ] T08.2 Bound total buffered events: pause at a high-water mark, resume below a low-water mark (hysteresis)
+- [x] T08.2 Bound total buffered events: pause at a high-water mark, resume below a low-water mark (hysteresis)
 - [ ] T08.3 Slow-sink test: `docker pause` Meilisearch for 5 min under load → memory flat, no crash;
       unpause → catch up → reconcile = 0
 - [ ] T08.4 WAL safety: first observe retained WAL growing with the connector stopped (record it). Then set
