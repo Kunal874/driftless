@@ -11,7 +11,10 @@ Updated 2026-10-22, end of T06 (session 1). Overwrite this at every checkpoint: 
   `DRIFTLESS_BACKFILL_CHUNK` (1000), `DRIFTLESS_BACKFILL_DEBUG_DELAY_MS` (also passed through compose);
   `scripts/backfill-race.sh DELAY RATE SECONDS` (empty index → backfill under load → reconcile). Smoke with
   no concurrent writes: 102,327 rows in 73 s, **0 drift**. (Slow: each chunk waits to be applied; tune later.)
-- Next step: **T07.2**: reproduce the race (`backfill-race.sh 300 200 120`) → `docs/bugs/BUG-002-…`
+  T07.2 done: **race reproduced**. `backfill-race.sh 300 200 150` → **42 drifted documents** (40 hold older
+  values, 2 deleted rows resurrected); without the delay this run happened to stay clean (the window is ms wide).
+  Written up in `docs/bugs/BUG-002-backfill-race.md` (repro = commit `9852dce`).
+- Next step: **T07.3**: watermark backfill (replaces `naiveBackfill`)
 
 ## What the system holds right now
 
