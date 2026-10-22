@@ -36,6 +36,12 @@ log shows 36 restarts in the run window, matching Prometheus (`changes(driftless
 36). 0 fatal errors, backpressure never paused. Caught up 5.3 s after the load stopped; reconcile compared 261,113
 rows in 9.2 s.
 
+**Unplanned extra run (2026-10-23 02:19–02:25 IST):** a quoting mistake started `chaos.sh 1200 30 1000` a second time
+(learn/task-09 §9). It ran ~2.5 min at 1,000 tx/s, SIGKILLed the connector twice, and was stopped mid-loop, leaving
+the connector down for ~3 min while its pgbench kept writing. After the stray pgbench was stopped and the connector
+restarted: caught up in 20.6 s, slot `reserved` with 35 MB retained, `node scripts/reconcile.ts`: 274,776 rows =
+274,776 documents, **0 / 0 / 0**. Not counted in the table: no planned command, and the kill count is approximate.
+
 T06 runs at 200 tx/s: at that rate 60–100 transactions are in flight at any moment (stats line, §4), so every
 kill threw away unconfirmed, partly applied work. Caught up 0.5 s and 2.1 s after the load stopped; 51 connector
 starts, 0 fatal errors.

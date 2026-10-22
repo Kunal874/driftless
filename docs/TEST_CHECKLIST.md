@@ -113,11 +113,15 @@ Handy commands:
 
 ## T09 — Observability & benchmarks
 
-- [ ] `/metrics` exposes lag histogram, events by op, batch size, queue depth, acked LSN, retained WAL bytes
-- [ ] Grafana dashboard appears from provisioning after `docker compose up`
-- [ ] RESULTS.md: lag p99 at fixed rates, max sustainable rate, batch 1 vs 500, each with command,
-      versions and machine
-- [ ] Headline chaos run recorded
+- [x] `/metrics` exposes lag histogram, events by op, batch size, queue depth, acked LSN, retained WAL bytes
+      (live scrape at T09.1, all present; plus write-time histogram; non-/metrics paths → 404)
+- [x] Grafana dashboard appears from provisioning after `docker compose up`
+      (`--profile metrics`: provisioned, read-only, 15 panels; every panel query returned data; rendered in a browser)
+- [x] RESULTS.md: lag p99 at fixed rates, max sustainable rate, batch 1 vs 500, each with command,
+      versions and machine (§8 lag 200 → ~4,800 tx/s, the load generator's limit; §9 lanes 1/4/8 + same-index drain;
+      batch 1 vs 500 is §4, T06: 9 vs 1,613 tx/s)
+- [x] Headline chaos run recorded (RESULTS §1: `chaos.sh 1200 30 1000`, 1,197,314 transactions, 36 SIGKILLs,
+      261,113 rows = documents, 0 / 0 / 0)
 
 ## T10 — Config, packaging, release
 

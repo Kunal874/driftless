@@ -5,7 +5,7 @@ Each step lists **where it can break**. When something goes wrong, find the step
 
 ---
 
-## Flow 1 — One row change, end to end · ✅ built (T03–T06); the lag metric in step 10 comes in T09
+## Flow 1 — One row change, end to end · ✅ built (T03–T06); lag metric T09
 
 1. The app runs `UPDATE products SET price_cents = 999 WHERE id = 42` and commits.
    - *Can break:* a table without a primary key. Once it's in a publication, Postgres
@@ -36,7 +36,8 @@ Each step lists **where it can break**. When something goes wrong, find the step
      on crash); acking one byte past the end (BUG-001: the next transaction can be skipped after
      a restart); never acking while idle (WAL grows forever, so confirm the keepalive position when
      nothing is pending).
-10. A search for the product now shows the new price. Lag = time of step 7 − commit time (T09).
+10. A search for the product now shows the new price. Lag = time of step 7 − commit time, observed in
+    `driftless_lag_seconds` (T09; RESULTS §8).
 
 ---
 

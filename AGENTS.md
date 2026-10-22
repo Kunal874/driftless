@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T08 — Backpressure & WAL safety** (tag `checkpoint/T08`) |
-| Next step | **T09.1**: `src/metrics.ts` + `GET /metrics` (docs/BUILD_PLAN.md → T09) |
+| Last checkpoint | **T09 — Observability & benchmarks** (tag `checkpoint/T09`) |
+| Next step | **T10.1**: config file `driftless.config.json` (docs/BUILD_PLAN.md → T10) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

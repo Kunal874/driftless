@@ -1,60 +1,59 @@
 # Handover — where we left off
 
-Updated 2026-10-23, during T09 (session 1). Overwrite this at every checkpoint: it describes
+Updated 2026-10-23, end of T09 (session 1). Overwrite this at every checkpoint: it describes
 *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T08 — Backpressure & WAL safety** (tag `checkpoint/T08`)
-- In progress: **T09 — Observability & benchmarks**. T09.1 ✅ (`src/metrics.ts`, `GET /metrics` on 9464).
-  T09.2 ✅ (`docker compose --profile metrics up -d`: Prometheus 127.0.0.1:9090, Grafana 127.0.0.1:3000, 15-panel
-  dashboard "Driftless" provisioned from `docker/grafana/`, anonymous view-only)
-  T09.3 ✅ (`scripts/bench-lag.ts`; RESULTS §8 lag at 200 → ~4,800 tx/s, §9 lanes trade-off → D-027)
-  T09.4 ✅ headline chaos run: `chaos.sh 1200 30 1000` → 1,197,314 transactions, 36 SIGKILLs, 261,113 rows =
-  documents, **0 / 0 / 0** (RESULTS §1)
-- Next step: **T09.5**: verify (TEST_CHECKLIST → T09), finish `learn/task-09-observability.md` (drafted, §9 = the
-  headline run), AGENTS.md status, tag `checkpoint/T09`
+- Last checkpoint: **T09 — Observability & benchmarks** (tag `checkpoint/T09`)
+- In progress: nothing
+- Next step: **T10.1**: config file `driftless.config.json` (BUILD_PLAN.md → T10)
 
 ## What the system holds right now
 
-- `products`: ~150,085 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0).
-- A **new** slot `driftless_slot` (recreated during the T08.4 recovery experiment), caught up.
-- Postgres now runs with `max_slot_wal_keep_size=1GB` (compose). The `connector` service is **stopped**.
+- `products`: 274,776 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after the accidental
+  extra run noted in RESULTS §1).
+- Slot `driftless_slot` caught up. Postgres runs with `max_slot_wal_keep_size=1GB`.
+- `connector`, `prometheus` and `grafana` are **stopped** (`docker compose stop`, containers kept). Start them with
+  `docker compose --profile connector --profile metrics up -d`.
 
 ## Done so far
 
-- **T01–T07 ✅**: foundation, source data, WAL reader + confirm protocol (BUG-001), sink + retry policy, correctness
-  harness, lanes + batching + checkpointer (9 → 6,752 tx/s), watermark backfill (BUG-002, BUG-003; 10/10 at 0 drift).
-- **T08 ✅**: backpressure (D-025): pause the replication socket at `DRIFTLESS_MAX_PENDING` (50,000), resume at half,
-  10 s status re-send. 5-min Meilisearch freeze at 600 tx/s → memory bounded vs 45 → 220 MiB uncapped. **BUG-004**
-  (HTTP 408 treated as a rejection) found and fixed. WAL safety (D-026): 1 GB slot cap; refuse to start on a lost slot
-  with recovery steps; recovery proven (0 drift). `npm test` 44/44.
+- **T01–T08 ✅**: foundation, source data, WAL reader + confirm protocol (BUG-001), sink + retry policy, correctness
+  harness, lanes + batching + checkpointer, watermark backfill (BUG-002, BUG-003), backpressure + WAL safety (BUG-004).
+- **T09 ✅**: `GET /metrics` on 9464 (`src/metrics.ts`): lag histogram measured in the checkpointer (commit →
+  confirmable), write time, batch size, changes by op, queue gauges, slot retained WAL. Prometheus + Grafana under
+  profile `metrics`, a 15-panel dashboard provisioned from `docker/`. `scripts/bench-lag.ts` (quantiles from
+  before/after snapshots, matches Prometheus). Results:
+  - Lag p99 3.6–5.0 s up to 1,000 tx/s; kept up with ~4,800 tx/s, the load generator's limit (RESULTS §8).
+  - Lag ≈ 2 × one Meilisearch write; a write is mostly Meilisearch rebuilding its word FST, which grows with the
+    synthetic vocabulary.
+  - 1 lane gives lower steady lag than 8, while 8 lanes drain a backlog fastest → default stays 8 (**D-027**, §9).
+  - The T06 drain number belongs to a ~105k-doc index: the same command on 195k docs gives 2,810 tx/s.
+  - **Headline chaos run:** 1,197,314 transactions at 1,000 tx/s, 36 SIGKILLs → **0 drift** over 261,113 docs (§1).
+  - `npm test` 45/45.
 
-## Notes for T09 (read before starting)
+## Notes for T10 (read before starting)
 
-- `prom-client` is pre-approved; install with the 14-day rule (D-017).
-- **Lag** = time a transaction becomes confirmable − its `commitTime`. The natural place is `Checkpointer.advance()`: give
-  `track()` the commit time and observe each transaction it moves past. That measures commit → applied *and* confirmable.
-- Useful gauges already exist as values in `main.ts`: changes waiting (`queue.length + lanes.queued()`), `readingPaused`,
-  `checkpointer.inFlight`, `confirmed`. Retained WAL needs a periodic `pg_replication_slots` query (one small pg client).
-- Prometheus/Grafana ports: 9090 and 3000 were free at T01. Check again before binding (other projects' containers start
-  with Docker). Bind to `127.0.0.1`.
-- Headline numbers to produce (RESULTS.md "Resume claims"): lag p99 at fixed rates, and one long chaos run at full rate
-  with reconcile.
-- **Finding at T09.1 (record it in RESULTS with T09.3):** at 200 tx/s, lag is ~2.1 s on average, all of it between 1 and
-  2.5 s. Clocks agree within 1 ms (checked from inside the connector). Cause: every Meilisearch batch takes ~560 ms
-  however small, and 420 ms of it is "post processing words > word fst" (`GET /batches` → `progressTrace`). The
-  vocabulary keeps growing because every description rewrite adds a random `md5` word. Lag ≈ 1.8 × one write
-  (`driftless_write_seconds` avg 1.19 s). This is Meilisearch on this data, not Driftless overhead; don't tune it away.
-  It also **drifts upward during a run** (write p50 1.2 s → 1.75 s over another 60 s at 200 tx/s), because the vocabulary
-  keeps growing. So record the order of the benchmark runs, and the index's state at each one.
+- **README numbers come from RESULTS.md only**, with their conditions: the "Resume claims" table is ready. Say which
+  index size a throughput number was measured on (§4 note), and that lag is dominated by Meilisearch (§8).
+- Env vars the config file (T10.1) must keep honoring: `PG*`, `MEILI_HOST`, `MEILI_MASTER_KEY`, `DRIFTLESS_LANES`,
+  `DRIFTLESS_BATCH_MAX`, `DRIFTLESS_MAX_PENDING`, `DRIFTLESS_BACKFILL*`, `DRIFTLESS_METRICS_HOST`/`_PORT`,
+  `DRIFTLESS_LOG_TXNS`, `DRIFTLESS_DEBUG_ACK_DELAY_MS`. `src/config.ts` is the single place they're read.
+- The Dockerfile (T10.2) replaces the connector's `./:/app:ro` mount. The chaos/bench scripts drive the `connector`
+  compose service, so keep its name and env, and re-run one short `chaos.sh 60 10 200` after switching.
+- The 14-day rule (D-017) applies to the Dockerfile's base image too: `node:24.18.0-alpine` is already pinned and old
+  enough.
+- A Grafana screenshot could illustrate the README, but it isn't required. The dashboard runs from `docker/` for
+  anyone.
 
-## Files changed in T08
+## Files changed in T09
 
-`src/pipeline/backpressure.ts` (+ test), `src/main.ts`, `src/config.ts`, `src/sinks/meilisearch.ts` (+ test),
-`src/source/replication.ts`, `docker-compose.yml`, `scripts/slow-sink.sh`, `docs/bugs/BUG-004-…`, `docs/` (DECISIONS D-025,
-D-026, D-021 update, RESULTS §6–7, ROLLBACK, FLOW, ARCHITECTURE, BUILD_PLAN, TEST_CHECKLIST), `AGENTS.md` status,
-`learn/task-08-backpressure.md`
+`src/metrics.ts` (new), `src/main.ts`, `src/config.ts`, `src/pipeline/checkpointer.ts` (+ test),
+`scripts/bench-lag.ts` (new), `docker-compose.yml` (connector port 9464, prometheus, grafana), `docker/` (new:
+Prometheus config, Grafana provisioning + dashboard), `package.json` (prom-client 15.1.3), `docs/` (RESULTS §1, §4
+note, §8, §9, claims; DECISIONS D-027; ARCHITECTURE, FLOW, CONSTRAINTS ports, BUILD_PLAN, TEST_CHECKLIST),
+`AGENTS.md` status, `learn/task-09-observability.md`
 
 ## Environment (verified 2026-10-23)
 
@@ -65,6 +64,7 @@ D-026, D-021 update, RESULTS §6–7, ROLLBACK, FLOW, ARCHITECTURE, BUILD_PLAN, 
 | Node / npm | 24.18.0 / 11.16.0 (connector container: `node:24.18.0-alpine`) |
 | Docker | Engine 29.6.2, Desktop 4.83.0, Compose v5.3.1; engine sees 28 CPUs, ~7.6 GiB RAM |
 | Ports already taken | 5432 Windows Postgres · 5433 + 6379 online-judge-v2 · 5434 + 6380 reachinbox-scheduler (both auto-start with Docker) |
+| Driftless ports | 5440 Postgres · 7700 Meilisearch · 9464 metrics · 9090 Prometheus · 3000 Grafana (all 127.0.0.1) |
 
 ## Open issues / watch out
 
@@ -78,6 +78,13 @@ D-026, D-021 update, RESULTS §6–7, ROLLBACK, FLOW, ARCHITECTURE, BUILD_PLAN, 
 - `docker compose up -d --force-recreate` deletes the old container's logs. Save logs first if you need them (BUG-004 lesson).
 - Docker Desktop may be stopped at session start. Start it before `docker compose up -d --wait`.
 - Init scripts in `db/init/` only run on an **empty** volume (`docker compose down -v` wipes data; ask first).
+- The index keeps growing with every benchmark (vocabulary too), so Meilisearch gets slower over time. Benchmarks are
+  only comparable on the same index state; record it with each run (RESULTS §8–9).
+- For doc edits: avoid `sed` with `#` delimiters on Markdown (`##` clashes). **Never put text containing backticks
+  inside bash double quotes**: bash runs it as a command. In T09 that started an unintended second `chaos.sh`
+  (learn/task-09 §9). Use plain file edits or a quoted heredoc (`<<'EOF'`).
+- After stopping a script that started background jobs, check for orphans: `ps -ef | grep -E "workload|pgbench"` and
+  `docker compose exec -T postgres ps -o pid,args | grep pgbench`.
 - BUG-001 could be reported upstream to `kibae/pg-logical-replication`. That's the owner's decision
   (outward-facing); the repro script and note are ready.
 

@@ -64,7 +64,7 @@ atomicity inside the index. High availability (stretch S2).
 | T06 | Ordered lanes, batching, checkpointer | 3 | ✅ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ✅ |
 | T08 | Backpressure & WAL safety | 5 | ✅ |
-| T09 | Observability & benchmarks | 5–6 | ⬜ |
+| T09 | Observability & benchmarks | 5–6 | ✅ |
 | T10 | Config, packaging, README, release | 6 | ⬜ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
@@ -301,7 +301,7 @@ First reproduce the naive race, then fix it (D-008).
 
 ---
 
-## T09 — Observability & benchmarks ⬜
+## T09 — Observability & benchmarks ✅
 
 **Goal:** make freshness visible, and produce the resume numbers from real, recorded runs.
 
@@ -313,7 +313,7 @@ First reproduce the naive race, then fix it (D-008).
 - [x] T09.3 Benchmarks: pgbench at fixed rates, stepping up until lag grows without bound; batch 1 vs 500;
       lanes 1 / 4 / 8 → RESULTS.md with machine, versions and exact commands
 - [x] T09.4 Headline chaos run ([M] updates, SIGKILL every 30 s) → reconcile = 0 → RESULTS.md
-- [ ] T09.5 Verify (TEST_CHECKLIST → T09), `learn/task-09-observability.md`, checkpoint
+- [x] T09.5 Verify (TEST_CHECKLIST → T09), `learn/task-09-observability.md`, checkpoint
 
 **Dependencies:** `prom-client`.
 

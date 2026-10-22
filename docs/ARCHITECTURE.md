@@ -64,7 +64,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Backfill | snapshot existing rows between watermarks, column-aware; progress saved + resumed (D-023, D-024, BUG-002/003) | `src/source/backfill.ts` | T07 | ✅ |
 | Backpressure | pause the replication socket at the pending cap, resume at half; 10 s status re-send (D-025) | `src/pipeline/backpressure.ts`, `src/main.ts` | T08 | ✅ |
 | WAL safety | slot WAL capped at 1 GB (compose); refuse to start on a lost slot (D-026) | `docker-compose.yml`, `src/source/replication.ts` | T08 | ✅ |
-| Metrics | Prometheus endpoint, lag histogram | `src/metrics.ts` | T09 | 📐 |
+| Metrics | `GET /metrics` (prom-client, port 9464): lag + write-time + batch-size histograms, changes by op, queue gauges read at scrape time, slot retained WAL; Prometheus + Grafana (profile `metrics`, dashboard provisioned) | `src/metrics.ts`, `docker/` | T09 | ✅ |
 | Config | tables → index mapping, validation | `src/config.ts` | T10 | 📐 |
 
 File names are the plan, not a contract. If a task ends up splitting things differently,
@@ -96,7 +96,8 @@ type Transaction = {
   receives acks; a normal SQL connection is used for setup checks, backfill and watermarks.
 - **Driftless → Meilisearch:** HTTP. Writes go to the documents API and return a task id;
   Driftless polls the tasks API until the task `succeeded` before counting it as applied.
-- **Prometheus → Driftless (T09):** Prometheus scrapes `GET /metrics`.
+- **Prometheus → Driftless (T09):** Prometheus scrapes `GET /metrics` (port 9464) every 5 s; Grafana reads Prometheus.
+  Lag = commit time (from the WAL) → the moment the transaction becomes confirmable (checkpointer callback).
 - **No frontend, no user auth.** Everything is local. Meilisearch is protected by a dev master
   key; Postgres by dev credentials; all ports are bound to `127.0.0.1`.
 - **Where logic lives:** database / WAL logic in `src/source/`, ordering and acks in
@@ -123,10 +124,10 @@ driftless/
 │   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07)
 │   ├── sinks/                document.ts, meilisearch.ts (T04)
 │   ├── pipeline/             lanes.ts, checkpointer.ts (T06), backpressure.ts (T08)
-│   └── metrics.ts            📐 T09
+│   └── metrics.ts            Prometheus metrics + GET /metrics (T09)
 ├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05),
-│                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08)
-├── docker/grafana/         📐 T09: dashboard provisioning
+│                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08), bench-lag.ts (T09)
+├── docker/                 prometheus/prometheus.yml, grafana/ provisioning + dashboard JSON (T09)
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md
 │   ├── DECISIONS.md   CONSTRAINTS.md  TEST_CHECKLIST.md  ROLLBACK.md
