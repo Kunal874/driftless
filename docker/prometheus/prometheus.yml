@@ -1,0 +1,10 @@
+# Prometheus for local runs (T09): scrapes the connector container's GET /metrics every 5 s.
+# A connector started on the host (`node src/main.ts`) isn't scraped: benchmarks run it in Docker, so its clock and
+# Postgres's are the same machine's (the lag metric compares the two).
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: driftless
+    static_configs:
+      - targets: ["connector:9464"]

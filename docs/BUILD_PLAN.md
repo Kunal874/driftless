@@ -308,7 +308,7 @@ First reproduce the naive race, then fix it (D-008).
 - [x] T09.1 `src/metrics.ts` + `GET /metrics` (prom-client): `driftless_lag_seconds` histogram
       (sink-confirmed time − commit time), events applied by op, batch size, lane queue depth, acked LSN,
       slot retained WAL bytes
-- [ ] T09.2 Prometheus + Grafana in compose (127.0.0.1 ports; check they're free first); dashboard
+- [x] T09.2 Prometheus + Grafana in compose (127.0.0.1 ports; check they're free first); dashboard
       provisioned from `docker/grafana/`
 - [ ] T09.3 Benchmarks: pgbench at fixed rates, stepping up until lag grows without bound; batch 1 vs 500;
       lanes 1 / 4 / 8 → RESULTS.md with machine, versions and exact commands

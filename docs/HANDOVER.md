@@ -6,9 +6,11 @@ Updated 2026-10-23, during T09 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T08 — Backpressure & WAL safety** (tag `checkpoint/T08`)
-- In progress: **T09 — Observability & benchmarks**. T09.1 ✅ (`src/metrics.ts`, `GET /metrics` on 9464)
-- Next step: **T09.2**: Prometheus `prom/prometheus:v3.15.0` + Grafana `grafana/grafana:13.2.3` (both ≥ 14 days old
-  on 2026-10-23) in compose under profile `metrics`, dashboard provisioned from `docker/grafana/`
+- In progress: **T09 — Observability & benchmarks**. T09.1 ✅ (`src/metrics.ts`, `GET /metrics` on 9464).
+  T09.2 ✅ (`docker compose --profile metrics up -d`: Prometheus 127.0.0.1:9090, Grafana 127.0.0.1:3000, 15-panel
+  dashboard "Driftless" provisioned from `docker/grafana/`, anonymous view-only)
+- Next step: **T09.3**: lag benchmark at stepped fixed rates. First make the lag buckets finer between 1 and 10 s
+  (p99 at 200 tx/s showed as 4.95 s, i.e. just "somewhere in 2.5–5 s")
 
 ## What the system holds right now
 
@@ -41,6 +43,8 @@ Updated 2026-10-23, during T09 (session 1). Overwrite this at every checkpoint: 
   however small, and 420 ms of it is "post processing words > word fst" (`GET /batches` → `progressTrace`). The
   vocabulary keeps growing because every description rewrite adds a random `md5` word. Lag ≈ 1.8 × one write
   (`driftless_write_seconds` avg 1.19 s). This is Meilisearch on this data, not Driftless overhead; don't tune it away.
+  It also **drifts upward during a run** (write p50 1.2 s → 1.75 s over another 60 s at 200 tx/s), because the vocabulary
+  keeps growing. So record the order of the benchmark runs, and the index's state at each one.
 
 ## Files changed in T08
 
