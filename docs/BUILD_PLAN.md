@@ -332,7 +332,7 @@ First reproduce the naive race, then fix it (D-008).
       include/exclude), validated at start with clear errors; env vars override
 - [x] T10.2 `Dockerfile` (node:24-alpine, `npm ci --omit=dev`, runs `node src/main.ts`, no build step) +
       `.dockerignore`; the compose `connector` service uses it
-- [ ] T10.3 README.md: what it is, how it works (diagram), quick start, tests, results (from RESULTS.md only),
+- [x] T10.3 README.md: what it is, how it works (diagram), quick start, tests, results (from RESULTS.md only),
       limitations
 - [ ] T10.4 Final docs pass: ARCHITECTURE and FLOW match the code; DECISIONS complete; learn/task-01…10 exist
 - [ ] T10.5 GitHub, **only after the owner's explicit go-ahead**: create the repo, push `main` + tags, check
