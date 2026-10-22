@@ -63,6 +63,7 @@ To kill a process the hard way from a script, it's easiest if Docker runs it. Th
 `docker-compose.yml` runs `node src/main.ts` inside `node:24.18.0-alpine`:
 
 - **Read-only mount of the repo** (`./:/app:ro`): no image to build; Node runs the TypeScript directly.
+  (Task 10 replaced the mount with a real image built from the `Dockerfile`; see learn/task-10-release.md.)
   `node_modules` comes from your Windows install, which works on Linux because every runtime dependency is
   plain JavaScript.
 - **Inside Docker's network**, it reaches the databases by service name: `postgres:5432`,

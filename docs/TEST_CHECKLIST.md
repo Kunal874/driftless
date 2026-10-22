@@ -125,10 +125,12 @@ Handy commands:
 
 ## T10 — Config, packaging, release
 
-- [ ] Fresh clone → README quick start works end to end
+- [x] Fresh clone → README quick start works end to end (own compose project: 100,000-row backfill in 5.9 s,
+      6,033 tx, reconcile 0 drift, search, Grafana 200, Prometheus target up, `npm test` 52/52, typecheck clean)
 - [x] `docker build` works; the image runs against the compose stack (244 MB, user `node`, no tests or dev
       dependencies; re-backfilled 274,779 rows; `chaos.sh 60 10 200` → 6 kills, 0 drift)
 - [x] A bad config gives a clear validation error (one message, exit 2: several mistakes at once, a secret in the
       file, bad JSON, missing file, wrong primary key, unknown table/column; a wrong key creates no index)
-- [ ] ARCHITECTURE.md and FLOW.md match the code; `learn/task-01` … `task-10` exist
+- [x] ARCHITECTURE.md and FLOW.md match the code; `learn/task-01` … `task-10` exist (fixed: "500 docs / 50 ms",
+      the never-built cache, Flow 2 status, the README marker)
 - [ ] Pushed with the owner's go-ahead; GitHub contributors show only the owner

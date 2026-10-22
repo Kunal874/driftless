@@ -334,7 +334,7 @@ First reproduce the naive race, then fix it (D-008).
       `.dockerignore`; the compose `connector` service uses it
 - [x] T10.3 README.md: what it is, how it works (diagram), quick start, tests, results (from RESULTS.md only),
       limitations
-- [ ] T10.4 Final docs pass: ARCHITECTURE and FLOW match the code; DECISIONS complete; learn/task-01…10 exist
+- [x] T10.4 Final docs pass: ARCHITECTURE and FLOW match the code; DECISIONS complete; learn/task-01…10 exist
 - [ ] T10.5 GitHub, **only after the owner's explicit go-ahead**: create the repo, push `main` + tags, check
       the contributors list shows only the owner; tag `v0.1.0`
 - [ ] T10.6 Verify (TEST_CHECKLIST → T10), `learn/task-10-release.md`, checkpoint

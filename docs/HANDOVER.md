@@ -9,15 +9,21 @@ Updated 2026-10-23, end of T09 (session 1). Overwrite this at every checkpoint: 
 - In progress: **T10**. T10.1 ✅ config file (`driftless.config.json`, `src/config-file.ts`, D-028). T10.2 ✅ `Dockerfile` +
   `.dockerignore`; the compose `connector` is built from it (no repo mount any more: after code changes use
   `docker compose up -d --build connector`; the test scripts run `docker compose build -q connector` themselves)
-- Next step: **T10.3**: README.md (numbers only from RESULTS.md)
+  T10.3 ✅ README (fresh-clone test passed). T10.4 ✅ docs pass, `learn/task-10-release.md`.
+- Next step: **T10.5**: push to GitHub, **only after the owner says so in chat**, and only with the owner's choices of
+  visibility (public/private) and license (no LICENSE file yet). `gh` is logged in as `Kunal874`; there's no remote.
+  After the push: replace `<repo-url>` in README → Quick start, tag `v0.1.0`, check that the contributors list shows only the
+  owner, then T10.6 (tick the last checklist item, AGENTS.md status, tag `checkpoint/T10`).
+- Left for the owner: delete the folder `D:\PROJECTS\driftless-fresh` (the fresh-clone test; its Docker project is
+  already removed, and a safety check stopped me from deleting the folder).
 
 ## What the system holds right now
 
-- `products`: 275,353 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after the T10.2 chaos
-  smoke run). The test index `products_t10` was deleted.
+- `products`: 275,353 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after restarting the stack
+  following the fresh-clone test). The test index `products_t10` was deleted.
 - Slot `driftless_slot` caught up. Postgres runs with `max_slot_wal_keep_size=1GB`.
-- `connector`, `prometheus` and `grafana` are **stopped** (`docker compose stop`, containers kept). Start them with
-  `docker compose --profile connector --profile metrics up -d`.
+- `postgres`, `meilisearch` and `connector` (the built image) are **running**; `prometheus` and `grafana` are stopped.
+  Start them with `docker compose --profile metrics up -d`.
 
 ## Done so far
 

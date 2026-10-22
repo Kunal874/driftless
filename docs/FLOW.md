@@ -41,7 +41,7 @@ Each step lists **where it can break**. When something goes wrong, find the step
 
 ---
 
-## Flow 2 — Crash and restart · 🔨 verified in T03 for the printing connector (T04–T05 with the sink)
+## Flow 2 — Crash and restart · ✅ built (T03–T06); proven by the chaos runs (RESULTS §1: 36 SIGKILLs, 0 drift)
 
 1. Driftless dies at any moment (`docker kill`, power cut, bug).
 2. Postgres still holds all WAL after the slot's confirmed LSN. Nothing is lost.
@@ -51,7 +51,8 @@ Each step lists **where it can break**. When something goes wrong, find the step
    makes applying them again harmless (invariant 4).
 5. The index converges; `reconcile` reports 0 drift.
    - *Can break:* auto-ack left on in the replication library; ack before apply; any
-     non-idempotent write (e.g. incrementing a counter).
+     non-idempotent write (e.g. incrementing a counter); confirming a later transaction before an
+     earlier one has been applied (the checkpointer prevents it, T06).
 
 ---
 

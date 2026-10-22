@@ -22,7 +22,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
                         ▼
  ┌──────────────── Driftless (one Node.js process) ─────────────────────────────┐
  │ stream ─► decode ─► router: hash(pk) % N ─► lanes 0..N-1 (ordered, bounded)  │
- │                                                  │ batch: 500 docs / 50 ms   │
+ │                                                  │ natural batch ≤ 5000      │
  │                                                  ▼                           │
  │ checkpointer ◄─── "txn X applied" ◄─────── sink: Meilisearch writer          │
  │      │                                                                       │
@@ -41,7 +41,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 1. **Ack after apply.** Driftless acknowledges an LSN to Postgres only after the sink has
    confirmed every change at or before it. (Ack earlier and a crash loses data.)
 2. **Per-key order.** Changes to the same primary key reach the sink in commit order.
-3. **Single writer.** Only Driftless writes to the index (and, in S1, the cache).
+3. **Single writer.** Only Driftless writes to the index.
 4. **Idempotent writes.** Applying the same change twice leaves the same result
    (upsert/delete by primary key), so replays after a crash are harmless.
 5. **Backfill never wins against the stream.** A snapshot row must never overwrite a newer
@@ -49,9 +49,9 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 
 ## Components
 
-| Component | Job | Planned location | Task | Status |
+| Component | Job | Location | Task | Status |
 |---|---|---|---|---|
-| Dev stack | Postgres (logical WAL) + Meilisearch, local only; `connector` service (profile) since T05 | `docker-compose.yml` | T01, T05 | ✅ |
+| Dev stack | Postgres (logical WAL) + Meilisearch, local only; `connector` service (profile) since T05, built from the `Dockerfile` since T10 | `docker-compose.yml`, `Dockerfile` | T01, T05, T10 | ✅ |
 | Demo source data | `products` schema, seed, random write workload | `db/`, `scripts/workload.sh` | T02 | ✅ |
 | Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | ✅ |
 | Stream + decoder | pgoutput messages → `Transaction`s of `Change`s | `src/source/decode.ts`, `src/main.ts` | T03 | ✅ |
@@ -67,8 +67,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Metrics | `GET /metrics` (prom-client, port 9464): lag + write-time + batch-size histograms, changes by op, queue gauges read at scrape time, slot retained WAL; Prometheus + Grafana (profile `metrics`, dashboard provisioned) | `src/metrics.ts`, `docker/` | T09 | ✅ |
 | Config | `driftless.config.json`: connection (no secrets), table → index, primary key, column include/exclude; validated in full at start (`parseConfig`), then checked against the real table before anything is created (`checkSync`); env vars override (D-028) | `src/config-file.ts`, `src/config.ts`, `src/source/replication.ts` | T10 | ✅ |
 
-File names are the plan, not a contract. If a task ends up splitting things differently,
-update this table.
+If the code is split differently later, update this table.
 
 ## The core data shape (built in T03, `src/source/decode.ts`)
 
@@ -92,8 +91,9 @@ type Transaction = {
 
 ## How the parts connect
 
-- **Postgres ⇄ Driftless:** two connections. A *replication* connection streams the WAL and
-  receives acks; a normal SQL connection is used for setup checks, backfill and watermarks.
+- **Postgres ⇄ Driftless:** a *replication* connection streams the WAL and receives acks; normal SQL
+  connections do the setup checks, the backfill (with its watermarks), and the retained-WAL metric (one pooled
+  connection, queried at scrape time).
 - **Driftless → Meilisearch:** HTTP. Writes go to the documents API and return a task id;
   Driftless polls the tasks API until the task `succeeded` before counting it as applied.
 - **Prometheus → Driftless (T09):** Prometheus scrapes `GET /metrics` (port 9464) every 5 s; Grafana reads Prometheus.
@@ -103,13 +103,13 @@ type Transaction = {
 - **Where logic lives:** database / WAL logic in `src/source/`, ordering and acks in
   `src/pipeline/`, sink-specific code in `src/sinks/`. Sinks never talk to Postgres.
 
-## Folder layout (target; items marked 📐 don't exist yet)
+## Folder layout
 
 ```
 driftless/
 ├── AGENTS.md               agent instructions + current status (read first)
 ├── CLAUDE.md               makes Claude Code load AGENTS.md
-├── README.md               📐 T10: overview + quick start
+├── README.md               overview, results, quick start, configuration (T10)
 ├── driftless.config.json   what to sync where: connection (no secrets), table → index, columns (T10)
 ├── Dockerfile              the connector image, no build step; .dockerignore is an allow-list (T10)
 ├── docker-compose.yml      local stack (connector built from the Dockerfile; Prometheus/Grafana in T09)
