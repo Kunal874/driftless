@@ -227,7 +227,7 @@ the wiring, so every commit stays runnable.
 - [x] T06.1 `src/pipeline/lanes.ts`: router `hash(pk) % N` (inline FNV-1a, no dependency); each lane is
       an ordered queue applied one batch at a time. A lane sends whatever queued up while its previous write
       was in flight, up to `batchMax`. 6 unit tests.
-- [ ] T06.2 `src/pipeline/checkpointer.ts`: per transaction, count outstanding changes across lanes. Ack
+- [x] T06.2 `src/pipeline/checkpointer.ts`: per transaction, count outstanding changes across lanes. Ack
       the highest commit end LSN such that it and all earlier transactions are fully applied. Pure logic +
       unit tests (out-of-order completion, empty transactions, a transaction spanning lanes).
 - [ ] T06.3 Wire it in. Sink: coalesce per key across a lane batch (each key ends as one delete or one merged

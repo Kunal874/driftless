@@ -10,7 +10,9 @@ Updated 2026-10-22, end of T05 (session 1). Overwrite this at every checkpoint: 
   wiring). T06.1 done: `src/pipeline/lanes.ts` (FNV-1a router, ordered lanes, natural batching ≤ batchMax,
   `idle()` barrier) + 6 tests. Not wired into `main.ts` yet; the connector still applies one transaction
   at a time.
-- Next step: **T06.2**: `src/pipeline/checkpointer.ts` + tests
+  T06.2 done: `src/pipeline/checkpointer.ts` (track / advance = end of the unbroken run of fully applied
+  transactions / inFlight; history compacted) + 5 tests. Also not wired in yet.
+- Next step: **T06.3**: wire lanes + checkpointer into `main.ts`; sink `coalesce` + `applyBatch` + `clear`
 
 ## What the system holds right now
 
