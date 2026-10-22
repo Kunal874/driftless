@@ -133,7 +133,7 @@ events grouped by transaction, and acknowledges progress manually.
       `driftless_pub FOR TABLE public.products` and slot `driftless_slot`
       (`pg_create_logical_replication_slot('driftless_slot', 'pgoutput')`) only if missing. Check every
       published table has a primary key.
-- [ ] T03.3 Stream with `pg-logical-replication` + `PgoutputPlugin({ protoVersion: 1, publicationNames:
+- [x] T03.3 Stream with `pg-logical-replication` + `PgoutputPlugin({ protoVersion: 1, publicationNames:
       ['driftless_pub'] })`. `src/source/decode.ts` maps messages to `ChangeEvent` (ARCHITECTURE.md),
       grouped BEGIN…COMMIT; relation messages build the table → columns / primary-key map.
 - [ ] T03.4 Manual acks: turn the library's automatic acknowledgement **off**. Ack a transaction's

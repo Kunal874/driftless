@@ -13,7 +13,13 @@ Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: 
   creates `driftless_pub` (publishes truncate too, D-018) and `driftless_slot` (pgoutput) only if
   missing. Verified idempotent; clear errors for a missing table or a table without a primary key.
   **The slot now exists** (created at `0/71F31D8`) and retains WAL until Driftless acks.
-- Next step: **T03.3**: stream + decode (`src/source/decode.ts`, `src/main.ts`)
+- T03.3 done: `src/source/decode.ts` (pgoutput → `Transaction` of `Change`s) and `src/main.ts` (setup,
+  stream, print). Verified on real changes: insert; price-only update of #10 arrives **without**
+  `description` (unchanged TOAST omitted); delete; 3-row txn grouped; truncate; 100k-row seed txn.
+  **No acks yet by design**, so every start replays everything since the slot was created
+  (`confirmed_flush_lsn` still `0/71F31D8`, 43 MB retained).
+- Next step: **T03.4**: confirm protocol (`src/source/lsn.ts` already written, uncommitted), idle
+  acks, keepalive replies, crash/replay test, and reproducing the library's +1 overshoot
 
 ## pg-logical-replication 2.5.0: what reading its source showed (T03.1)
 

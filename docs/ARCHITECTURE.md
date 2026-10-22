@@ -53,8 +53,8 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 |---|---|---|---|---|
 | Dev stack | Postgres (logical WAL) + Meilisearch, local only | `docker-compose.yml` | T01 | ✅ |
 | Demo source data | `products` schema, seed, random write workload | `db/`, `scripts/workload.sh` | T02 | ✅ |
-| Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | 📐 |
-| Stream + decoder | pgoutput messages → `ChangeEvent`s grouped per transaction | `src/source/decode.ts` | T03 | 📐 |
+| Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | ✅ |
+| Stream + decoder | pgoutput messages → `Transaction`s of `Change`s | `src/source/decode.ts`, `src/main.ts` | T03 | 🔨 |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | 📐 |
 | Meilisearch sink | upsert / delete documents, wait for task success | `src/sinks/meilisearch.ts` | T04 | 📐 |
 | Reconcile + chaos | prove zero drift under crashes | `scripts/` | T05 | 📐 |
@@ -68,19 +68,25 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 File names are the plan, not a contract. If a task ends up splitting things differently,
 update this table.
 
-## The core data shape (planned, T03)
+## The core data shape (built in T03, `src/source/decode.ts`)
 
 ```ts
-type ChangeEvent = {
-  op: 'insert' | 'update' | 'delete';
-  table: string;                  // "public.products"
-  pk: string;                     // primary key as a string = document id
-  row?: Record<string, unknown>;  // new values; unchanged-TOAST columns are omitted
-  xid: number;                    // Postgres transaction id
-  commitLsn: string;              // e.g. "0/1A2B3C4": the ack position for this transaction
-  commitTime: Date;               // from pgoutput BEGIN; used for the lag metric
+type Change =
+  | { op: 'insert' | 'update'; table: string; pk: string; row: Record<string, unknown> } // row: only the
+  | { op: 'delete'; table: string; pk: string }                                          // columns sent;
+  | { op: 'truncate'; tables: string[] };                                                // unchanged TOAST omitted
+
+type Transaction = {
+  xid: number;           // Postgres transaction id
+  commitLsn: string;     // start of the commit record in the WAL
+  commitEndLsn: string;  // end of the commit record: what Driftless confirms once the txn is applied
+  commitTime: Date;      // used for the lag metric (T09)
+  changes: Change[];     // in commit order
 };
 ```
+
+`pk` is the primary key as a string, i.e. the document id. A primary-key change becomes
+`delete old` + `insert new`.
 
 ## How the parts connect
 
