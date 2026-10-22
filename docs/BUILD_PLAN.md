@@ -139,7 +139,7 @@ events grouped by transaction, and acknowledges progress manually.
 - [x] T03.4 Manual acks: turn the library's automatic acknowledgement **off**. Ack a transaction's
       commit LSN after its events are handled (printed, for now). With nothing in flight, ack
       keepalive positions so the slot keeps advancing while only *other* tables change.
-- [ ] T03.5 Vitest unit tests for the decoder, with recorded messages as fixtures (insert / update /
+- [x] T03.5 Vitest unit tests for the decoder, with recorded messages as fixtures (insert / update /
       delete / unchanged-TOAST column)
 - [ ] T03.6 Verify (TEST_CHECKLIST → T03), `learn/task-03-reading-the-wal.md`, checkpoint
 

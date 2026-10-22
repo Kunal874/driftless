@@ -24,7 +24,10 @@ Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: 
   inside the ack window → slot unchanged; restart re-delivers only the un-acked txn; idle connector
   advances the slot to the server's WAL position. Note: the repro script fast-forwards the slot with
   `pg_replication_slot_advance`, so the T03.3 test changes were skipped (test data only).
-- Next step: **T03.5**: decoder unit tests (`src/source/decode.test.ts` written, passing, uncommitted)
+- T03.5 done: `src/source/decode.test.ts`, 7 cases (grouping/order, unchanged TOAST vs NULL, REPLICA
+  IDENTITY FULL, primary-key change, refusing a key change that would lose TOAST values, TRUNCATE,
+  protocol errors). `npm test`: 10/10 pass.
+- Next step: **T03.6**: run the T03 checklist, write `learn/task-03-reading-the-wal.md`, checkpoint
 
 ## pg-logical-replication 2.5.0: what reading its source showed (T03.1)
 
