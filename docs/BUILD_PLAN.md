@@ -63,7 +63,7 @@ atomicity inside the index. High availability (stretch S2).
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ✅ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ✅ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ✅ |
-| T08 | Backpressure & WAL safety | 5 | ⬜ |
+| T08 | Backpressure & WAL safety | 5 | 🔨 |
 | T09 | Observability & benchmarks | 5–6 | ⬜ |
 | T10 | Config, packaging, README, release | 6 | ⬜ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
@@ -275,11 +275,11 @@ First reproduce the naive race, then fix it (D-008).
 
 ---
 
-## T08 — Backpressure & WAL safety ⬜
+## T08 — Backpressure & WAL safety 🔨
 
 **Goal:** a slow or dead sink never crashes Driftless, and a dead Driftless never fills the Postgres disk.
 
-- [ ] T08.1 Spike: find how to stop reading the replication stream (a library API, or pausing the
+- [x] T08.1 Spike: find how to stop reading the replication stream (a library API, or pausing the
       underlying socket so TCP backpressure stops the WAL sender). Record the mechanism in DECISIONS.md.
 - [ ] T08.2 Bound total buffered events: pause at a high-water mark, resume below a low-water mark (hysteresis)
 - [ ] T08.3 Slow-sink test: `docker pause` Meilisearch for 5 min under load → memory flat, no crash;

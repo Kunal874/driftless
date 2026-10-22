@@ -6,8 +6,10 @@ Updated 2026-10-23, end of T07 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T07 — Backfill** (tag `checkpoint/T07`)
-- In progress: nothing
-- Next step: **T08.1**: spike: how to stop reading the replication stream (BUILD_PLAN.md → T08)
+- In progress: **T08**. T08.1 done (spike, D-025): pause `service._connection.stream` (the `net.Socket` pg reads
+  via `'data'` events) at a pending-work cap, resume at half; re-send the confirmed position every 10 s
+  (`wal_sender_timeout` is 1 min). Found: `max_slot_wal_keep_size` is −1 (unlimited) on this stack.
+- Next step: **T08.2**: implement the bound + hysteresis + status timer in `src/main.ts`, with tests
 
 ## What the system holds right now
 

@@ -30,6 +30,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-022 | Natural batching + per-key coalescing across transactions | Accepted | T06 |
 | D-023 | Watermark backfill: marks written through the WAL bracket each chunk | Accepted | T07 |
 | D-024 | Backfill progress in an unpublished table; resume beats request | Accepted | T07 |
+| D-025 | Backpressure by pausing the replication socket; safe status timer | Accepted | T08 |
 
 ---
 
@@ -283,3 +284,23 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   first-time indexing and an accidentally deleted index.
 - **Consequences:** to force a fresh backfill, delete the `backfill` row and start with `DRIFTLESS_BACKFILL=1`
   (ROLLBACK.md). The state table is unpublished, so its writes never come back through the stream.
+
+### D-025 — Backpressure by pausing the replication socket; safe status timer
+- **Spike findings (T08.1):** `pg-logical-replication` 2.5 has no public pause. Its `flowControl` pauses
+  `_connection.stream`, but emits keepalives outside its queue (the D-019 race). `pg` reads the socket only
+  through its `'data'` events (`Connection.attachListeners` → `pg-protocol`'s `parse(stream, …)`), so pausing
+  that `net.Socket` stops *every* incoming message, keepalives included, while writes still work. Postgres defaults
+  on this stack: `wal_sender_timeout` = 1 min, `max_slot_wal_keep_size` = −1 (unlimited).
+- **Decision:** when the work waiting in Driftless (unprocessed stream messages + changes queued in lanes)
+  reaches `DRIFTLESS_MAX_PENDING`, pause that socket; resume when it falls to half (hysteresis). The socket is
+  reached through the library's private `_connection` field, checked at runtime so a library change fails loudly.
+  A timer re-sends the *confirmed* position every 10 s, well under the 60 s timeout, so a paused connection stays alive.
+- **Why:** pausing at the socket is real end-to-end backpressure. Unread data fills the kernel buffer, TCP stops the
+  sender, and Postgres keeps the WAL (which it does anyway until we confirm). Nothing is dropped and memory stays
+  bounded. Keeping our own counting preserves the D-019 idle check. Hysteresis avoids pausing and resuming on every message.
+- **Rejected:** `flowControl` (the keepalive race); dropping or spilling messages to disk (the slot already *is* the
+  durable backlog); a memory limit that crashes (that's an outage, not backpressure).
+- **Consequences:** memory is bounded by the cap, plus one in-flight batch per lane, plus **the largest single
+  transaction**. A transaction is assembled whole before dispatch (proto v1 sends it at commit) and isn't counted, or a
+  huge one could never complete. A paused connector lets WAL grow on the server, so `max_slot_wal_keep_size` must
+  cap it (T08.4).
