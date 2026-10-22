@@ -8,12 +8,10 @@ import {
   type Index,
   type Meilisearch,
 } from 'meilisearch';
-import type { Change, Transaction } from '../source/decode.ts';
+import type { RowChange } from '../pipeline/lanes.ts';
 import { toDocument, type Document } from './document.ts';
 
-// ponytail: fixed chunk size for big upsert runs (e.g. a 100k-row seed); T06 makes batching tunable.
-const MAX_DOCS_PER_WRITE = 10_000;
-const TASK_WAIT_MS = 10 * 60_000; // a 10k-document task can take a while; the client's default is 5 s
+const TASK_WAIT_MS = 10 * 60_000; // a big task can take a while; the client's default is 5 s
 
 // Creates the index with an explicit primary key if it doesn't exist yet. Without one, Meilisearch guesses
 // from the first document's fields (anything containing "id") and fails the task if the guess is ambiguous.
@@ -31,54 +29,46 @@ export async function ensureIndex(client: Meilisearch, uid: string, primaryKey: 
   }
 }
 
-export type Step =
-  | { kind: 'upsert'; docs: Map<string, Document> }
-  | { kind: 'delete'; ids: Set<string> }
-  | { kind: 'clear' };
-
-// Turns a transaction's changes into as few Meilisearch writes as possible without reordering anything.
-// Consecutive changes of the same kind share one write; several updates to one key inside it merge in
-// order (later fields win). A delete, an upsert run or a TRUNCATE always ends the write before it.
-export function planSteps(changes: Change[], table: string): Step[] {
-  const steps: Step[] = [];
+// Reduces a lane's batch to its net effect per key (D-022): each key ends as either one delete or one upsert
+// whose fields were merged in order (later wins, fields not resent are kept). The two sets touch different
+// keys, so they can be written in any order, even at the same time.
+// A delete followed by an upsert of the same key can only be a re-INSERT, which carries every column, so
+// that upsert is a whole row: merging it onto the stale document gives the same result as replacing it.
+export function coalesce(changes: RowChange[], table: string): { upserts: Map<string, Document>; deletes: Set<string> } {
+  const upserts = new Map<string, Document>();
+  const deletes = new Set<string>();
   for (const change of changes) {
-    const tables = change.op === 'truncate' ? change.tables : [change.table];
-    if (!tables.includes(table)) throw new Error(`change for a table Driftless doesn't mirror: ${tables.join(', ')}`);
-    const last = steps.at(-1);
-    if (change.op === 'truncate') {
-      steps.push({ kind: 'clear' });
-    } else if (change.op === 'delete') {
-      if (last?.kind === 'delete') last.ids.add(change.pk);
-      else steps.push({ kind: 'delete', ids: new Set([change.pk]) });
+    if (change.table !== table) throw new Error(`change for a table Driftless doesn't mirror: ${change.table}`);
+    if (change.op === 'delete') {
+      upserts.delete(change.pk);
+      deletes.add(change.pk);
+    } else if (deletes.delete(change.pk)) {
+      upserts.set(change.pk, toDocument(change.row)); // re-inserted after a delete: the whole row
     } else {
-      const doc = toDocument(change.row);
-      if (last?.kind === 'upsert') last.docs.set(change.pk, { ...last.docs.get(change.pk), ...doc });
-      else steps.push({ kind: 'upsert', docs: new Map([[change.pk, doc]]) });
+      upserts.set(change.pk, { ...upserts.get(change.pk), ...toDocument(change.row) });
     }
   }
-  return steps;
+  return { upserts, deletes };
 }
 
-// Applies a transaction to the index, one write at a time. Returns only when every write has really been
-// applied, so the caller may then confirm the transaction to Postgres (ack after apply, invariant 1).
+// Writes to the index. Each call returns only once Meilisearch has really applied the writes, so the
+// caller may count those changes as applied (ack after apply, invariant 1).
 export function meilisearchSink(index: Index, table: string) {
   return {
-    async apply(txn: Transaction): Promise<void> {
-      for (const step of planSteps(txn.changes, table)) {
-        if (step.kind === 'clear') {
-          await submit(() => index.deleteAllDocuments(), `xid ${txn.xid}: clear index (TRUNCATE)`);
-        } else if (step.kind === 'delete') {
-          const ids = [...step.ids];
-          await submit(() => index.deleteDocuments(ids), `xid ${txn.xid}: delete ${idList(ids)}`);
-        } else {
-          const docs = [...step.docs.values()];
-          for (let i = 0; i < docs.length; i += MAX_DOCS_PER_WRITE) {
-            const chunk = docs.slice(i, i + MAX_DOCS_PER_WRITE);
-            await submit(() => index.updateDocuments(chunk), `xid ${txn.xid}: upsert ${idList(chunk.map((d) => String(d.id)))}`);
-          }
-        }
+    async applyBatch(changes: RowChange[]): Promise<void> {
+      const { upserts, deletes } = coalesce(changes, table);
+      const writes: Promise<void>[] = [];
+      if (deletes.size > 0) {
+        const ids = [...deletes];
+        writes.push(submit(() => index.deleteDocuments(ids), `delete ${idList(ids)}`));
       }
+      if (upserts.size > 0) {
+        const docs = [...upserts.values()];
+        writes.push(submit(() => index.updateDocuments(docs), `upsert ${idList([...upserts.keys()])}`));
+      }
+      await Promise.all(writes); // different keys, so neither write can overtake the other in a harmful way
     },
+    clear: (): Promise<void> => submit(() => index.deleteAllDocuments(), 'clear index (TRUNCATE)'),
   };
 }
 

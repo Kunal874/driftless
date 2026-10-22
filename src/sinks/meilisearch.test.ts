@@ -1,50 +1,53 @@
 import { describe, expect, it } from 'vitest';
 import { MeilisearchApiError, MeilisearchRequestError, type EnqueuedTaskPromise } from 'meilisearch';
-import type { Change } from '../source/decode.ts';
-import { backoffMs, planSteps, submit } from './meilisearch.ts';
+import type { RowChange } from '../pipeline/lanes.ts';
+import { backoffMs, coalesce, submit } from './meilisearch.ts';
 
 const table = 'public.products';
-const upsert = (pk: string, row: Record<string, unknown>): Change => ({ op: 'update', table, pk, row: { id: pk, ...row } });
-const del = (pk: string): Change => ({ op: 'delete', table, pk });
+const insert = (pk: string, row: Record<string, unknown>): RowChange => ({ op: 'insert', table, pk, row: { id: pk, ...row } });
+const update = (pk: string, row: Record<string, unknown>): RowChange => ({ op: 'update', table, pk, row: { id: pk, ...row } });
+const del = (pk: string): RowChange => ({ op: 'delete', table, pk });
 
-describe('planSteps', () => {
-  it('merges consecutive upserts into one write, later fields winning per key', () => {
-    const steps = planSteps([
-      { op: 'insert', table, pk: '5', row: { id: '5', name: 'Lamp', description: 'long text', price_cents: 100 } },
-      upsert('6', { name: 'Desk' }),
-      upsert('5', { price_cents: 200 }), // a price-only update: description not sent
+describe('coalesce (D-022)', () => {
+  it("merges one key's updates in order, keeping fields that weren't resent", () => {
+    const { upserts, deletes } = coalesce([
+      insert('5', { name: 'Lamp', description: 'long text', price_cents: 100 }),
+      update('6', { name: 'Desk' }),
+      update('5', { price_cents: 200 }), // a price-only update from a later transaction: description not sent
+      update('5', { price_cents: 300 }),
     ], table);
-    expect(steps).toStrictEqual([
-      {
-        kind: 'upsert',
-        docs: new Map([
-          ['5', { id: '5', name: 'Lamp', description: 'long text', price_cents: 200 }],
-          ['6', { id: '6', name: 'Desk' }],
-        ]),
-      },
-    ]);
+    expect(upserts).toStrictEqual(new Map([
+      ['5', { id: '5', name: 'Lamp', description: 'long text', price_cents: 300 }],
+      ['6', { id: '6', name: 'Desk' }],
+    ]));
+    expect(deletes.size).toBe(0);
   });
 
-  it('never moves a change across a delete or a TRUNCATE', () => {
-    const steps = planSteps([
-      upsert('5', { name: 'v1' }), del('5'), upsert('5', { name: 'v2' }),
-      { op: 'truncate', tables: [table] }, upsert('7', { name: 'after' }),
-    ], table);
-    expect(steps.map((s) => s.kind)).toStrictEqual(['upsert', 'delete', 'upsert', 'clear', 'upsert']);
-    expect(steps[2]).toStrictEqual({ kind: 'upsert', docs: new Map([['5', { id: '5', name: 'v2' }]]) });
+  it('a later delete wins over earlier upserts', () => {
+    const { upserts, deletes } = coalesce([update('5', { name: 'v1' }), del('5')], table);
+    expect(upserts.size).toBe(0);
+    expect(deletes).toStrictEqual(new Set(['5']));
   });
 
-  it('collects consecutive deletes into one write, once per id', () => {
-    expect(planSteps([del('1'), del('2'), del('1')], table)).toStrictEqual([{ kind: 'delete', ids: new Set(['1', '2']) }]);
+  it('a re-insert after a delete replaces it with the whole new row', () => {
+    const { upserts, deletes } = coalesce([update('5', { name: 'old', stock: 1 }), del('5'), insert('5', { name: 'new', stock: 9 })], table);
+    expect(upserts).toStrictEqual(new Map([['5', { id: '5', name: 'new', stock: 9 }]])); // nothing kept from before the delete
+    expect(deletes.size).toBe(0);
+  });
+
+  it('ends with upserts and deletes on different keys, so their order cannot matter', () => {
+    const { upserts, deletes } = coalesce([del('1'), update('2', { n: 1 }), del('3'), update('1', { n: 2 }), del('2')], table);
+    expect([...upserts.keys()]).toStrictEqual(['1']);
+    expect([...deletes]).toStrictEqual(['3', '2']);
   });
 
   it('turns dates into ISO strings', () => {
-    const steps = planSteps([upsert('8', { updated_at: new Date('2026-10-22T16:00:00.123Z') })], table);
-    expect(steps[0]).toStrictEqual({ kind: 'upsert', docs: new Map([['8', { id: '8', updated_at: '2026-10-22T16:00:00.123Z' }]]) });
+    const { upserts } = coalesce([update('8', { updated_at: new Date('2026-10-22T16:00:00.123Z') })], table);
+    expect(upserts.get('8')).toStrictEqual({ id: '8', updated_at: '2026-10-22T16:00:00.123Z' });
   });
 
   it('refuses changes for a table it does not mirror', () => {
-    expect(() => planSteps([{ op: 'delete', table: 'public.orders', pk: '1' }], table)).toThrow(/doesn't mirror/);
+    expect(() => coalesce([{ op: 'delete', table: 'public.orders', pk: '1' }], table)).toThrow(/doesn't mirror/);
   });
 });
 

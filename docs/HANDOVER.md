@@ -12,7 +12,15 @@ Updated 2026-10-22, end of T05 (session 1). Overwrite this at every checkpoint: 
   at a time.
   T06.2 done: `src/pipeline/checkpointer.ts` (track / advance = end of the unbroken run of fully applied
   transactions / inFlight; history compacted) + 5 tests. Also not wired in yet.
-- Next step: **T06.3**: wire lanes + checkpointer into `main.ts`; sink `coalesce` + `applyBatch` + `clear`
+  T06.3 done: wired in (D-022). The sink has `coalesce` (net effect per key across a batch) + `applyBatch`
+  (≤ 2 parallel writes) + `clear`; `planSteps`/`apply` were removed. `main.ts` dispatches transactions into
+  the lanes without waiting, TRUNCATE is a barrier, and confirms go through the checkpointer; the idle check
+  counts in-flight transactions and pending confirms. Knobs `DRIFTLESS_LANES` (8), `DRIFTLESS_BATCH_MAX`
+  (500), `DRIFTLESS_LOG_TXNS`; compose passes the first two through. A stats line every 5 s.
+  Live: re-seed through 8 lanes → 0 drift; **200 tx/s for 30 s kept up** (caught up 13 ms after the load
+  ended, ~5 changes/write) → 0 drift. `npm test` 33/33.
+- Next step: **T06.4**: `scripts/bench-drain.sh` (written, uncommitted) for unbatched vs lanes 1 vs lanes 8
+  (+ batchMax variants: bulk loads looked slower with batches of 500); chaos at 200 tx/s
 
 ## What the system holds right now
 

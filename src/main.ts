@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import pg from 'pg';
 import { Meilisearch } from 'meilisearch';
 import { LogicalReplicationService, PgoutputPlugin, type Pgoutput } from 'pg-logical-replication';
@@ -6,6 +7,10 @@ import { ensureReplicationSetup } from './source/replication.ts';
 import { transactionAssembler, type Transaction } from './source/decode.ts';
 import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
+import { createLanes } from './pipeline/lanes.ts';
+import { Checkpointer } from './pipeline/checkpointer.ts';
+
+const STATS_EVERY_MS = 5_000;
 
 const meili = new Meilisearch(config.meilisearch);
 await ensureIndex(meili, config.index.uid, config.index.primaryKey);
@@ -17,15 +22,30 @@ const startLsn = await ensureReplicationSetup(db, config);
 await db.end();
 
 // Both of the library's automatic acks are off (learn/task-03): one acks every message on receipt,
-// the other acks the last *received* position every 10 s. Driftless acks only what it has handled.
+// the other acks the last *received* position every 10 s. Driftless acks only what it has applied.
 const service = new LogicalReplicationService(config.pgConfig, { acknowledge: { auto: false, timeoutSeconds: 0 } });
 const plugin = new PgoutputPlugin({ protoVersion: 1, publicationNames: [config.publication] });
+
+let stats = { txns: 0, changes: 0, writes: 0 }; // since the last stats line
+const checkpointer = new Checkpointer();
+const lanes = createLanes({
+  count: config.lanes,
+  batchMax: config.batchMax,
+  apply: async (changes) => {
+    await sink.applyBatch(changes); // returns only once Meilisearch reports the writes `succeeded`
+    stats.changes += changes.length;
+    stats.writes++;
+  },
+  onApplied: () => void confirmApplied().catch(fail),
+  onError: fail,
+});
 
 const assemble = transactionAssembler();
 const queue: Pgoutput.Message[] = []; // ponytail: unbounded; bounded + paused stream in T08
 let draining = false;
-let txnOpen = false; // a BEGIN has been handled but its transaction isn't confirmed yet
-let confirmed = lsnToBigInt(startLsn); // everything before this WAL position is handled
+let txnOpen = false; // a BEGIN has been handled but its transaction isn't dispatched yet
+let confirming = 0; // confirms in progress (including the crash-test delay)
+let confirmed = lsnToBigInt(startLsn); // everything before this WAL position is applied
 
 service.on('data', (_lsn: string, msg: Pgoutput.Message) => {
   queue.push(msg); // synchronous, so a later keepalive always sees this message as pending
@@ -33,10 +53,10 @@ service.on('data', (_lsn: string, msg: Pgoutput.Message) => {
 });
 
 service.on('heartbeat', (walEnd: string, _time: number, replyRequested: boolean) => {
-  // Idle = every message received so far is handled and confirmed. The stream arrives in order, so the
+  // Idle = every message received so far is applied and confirmed. The stream arrives in order, so the
   // server's walEnd then covers nothing we still owe: confirming it keeps the slot moving while only
   // unpublished tables change (otherwise their WAL piles up behind the slot).
-  const idle = !draining && !txnOpen && queue.length === 0;
+  const idle = !draining && !txnOpen && queue.length === 0 && checkpointer.inFlight === 0 && confirming === 0;
   const target = idle ? lsnToBigInt(walEnd) : confirmed;
   if (target > confirmed) void confirm(target).catch(fail);
   else if (replyRequested) void sendStatus(confirmed).catch(fail); // "still here", position unchanged
@@ -52,7 +72,7 @@ async function drain(): Promise<void> {
       if (msg.tag === 'begin') txnOpen = true;
       const txn = assemble(msg);
       if (txn) {
-        await handle(txn);
+        await dispatch(txn);
         txnOpen = false;
       }
     }
@@ -63,17 +83,39 @@ async function drain(): Promise<void> {
   }
 }
 
-async function handle(txn: Transaction): Promise<void> {
-  console.log(describe(txn));
-  const started = performance.now();
-  await sink.apply(txn); // returns only once Meilisearch reports every write `succeeded`
-  console.log(`  applied in ${Math.round(performance.now() - started)} ms`);
-  if (config.debugAckDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, config.debugAckDelayMs));
-  await confirm(lsnToBigInt(txn.commitEndLsn)); // ack only after handling (D-006)
-  console.log(`  confirmed ${txn.commitEndLsn}`);
+// Hands a transaction's changes to the lanes without waiting for them to be applied; the checkpointer
+// confirms it once every change has been. TRUNCATE is a barrier (D-018): everything before it is applied
+// first, and nothing after it is dispatched until the index has been cleared.
+async function dispatch(txn: Transaction): Promise<void> {
+  if (config.logTransactions) console.log(describe(txn));
+  stats.txns++;
+  const tracked = checkpointer.track(lsnToBigInt(txn.commitEndLsn), txn.changes.length);
+  for (const change of txn.changes) {
+    if (change.op === 'truncate') {
+      await lanes.idle();
+      await sink.clear();
+      tracked.remaining--;
+    } else {
+      lanes.push({ change, txn: tracked });
+    }
+  }
+  await confirmApplied(); // an empty or TRUNCATE-only transaction has no lane to report it
 }
 
-// Tells Postgres everything before `end` is handled, so it may recycle that WAL. Never moves backwards.
+// Confirms the end of the unbroken run of fully applied transactions, if it grew (ack after apply, D-006).
+async function confirmApplied(): Promise<void> {
+  const end = checkpointer.advance();
+  if (end === undefined) return;
+  confirming++;
+  try {
+    if (config.debugAckDelayMs > 0) await sleep(config.debugAckDelayMs);
+    await confirm(end);
+  } finally {
+    confirming--;
+  }
+}
+
+// Tells Postgres everything before `end` is applied, so it may recycle that WAL. Never moves backwards.
 async function confirm(end: bigint): Promise<void> {
   if (end <= confirmed) return;
   if (await sendStatus(end)) confirmed = end;
@@ -97,9 +139,17 @@ function describe(txn: Transaction): string {
   return lines.join('\n');
 }
 
+setInterval(() => {
+  if (stats.txns === 0 && stats.changes === 0) return;
+  const perWrite = stats.writes > 0 ? Math.round(stats.changes / stats.writes) : 0;
+  console.log(`driftless: +${stats.txns} txns, ${stats.changes} changes applied in ${stats.writes} writes ` +
+    `(${perWrite}/write); ${checkpointer.inFlight} txns in flight; confirmed ${bigIntToLsn(confirmed)}`);
+  stats = { txns: 0, changes: 0, writes: 0 };
+}, STATS_EVERY_MS).unref();
+
 function fail(err: unknown): never {
   console.error('driftless: fatal:', err);
-  process.exit(1); // fail-stop (D-009): nothing past an unhandled change is ever acked
+  process.exit(1); // fail-stop (D-009): nothing past an unapplied change is ever acked
 }
 
 let stopping = false;
@@ -110,6 +160,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   });
 }
 
-console.log(`driftless: streaming slot ${config.slot}, resuming after ${startLsn}`);
+console.log(`driftless: streaming slot ${config.slot}, resuming after ${startLsn} (${config.lanes} lanes, ` +
+  `up to ${config.batchMax} changes per write)`);
 await service.subscribe(plugin, config.slot).catch(fail);
 if (!stopping) fail(new Error('replication stream ended unexpectedly'));

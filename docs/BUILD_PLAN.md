@@ -230,7 +230,7 @@ the wiring, so every commit stays runnable.
 - [x] T06.2 `src/pipeline/checkpointer.ts`: per transaction, count outstanding changes across lanes. Ack
       the highest commit end LSN such that it and all earlier transactions are fully applied. Pure logic +
       unit tests (out-of-order completion, empty transactions, a transaction spanning lanes).
-- [ ] T06.3 Wire it in. Sink: coalesce per key across a lane batch (each key ends as one delete or one merged
+- [x] T06.3 Wire it in. Sink: coalesce per key across a lane batch (each key ends as one delete or one merged
       upsert, so a batch's upserts and deletes touch disjoint keys → at most 2 writes, sent in parallel);
       `clear()` for TRUNCATE. Main: dispatch transactions into lanes without waiting; TRUNCATE is a barrier
       (D-018); the idle check counts in-flight transactions; periodic stats line; knobs `DRIFTLESS_LANES`

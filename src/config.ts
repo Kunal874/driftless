@@ -22,6 +22,17 @@ export const table = 'public.products';
 export const index = { uid: 'products', primaryKey: 'id' };
 export const tables = [table];
 
+// Pipeline tuning (T06): how many ordered lanes apply changes in parallel, and the most changes one
+// Meilisearch write may carry.
+export const lanes = Number(process.env.DRIFTLESS_LANES ?? 8);
+export const batchMax = Number(process.env.DRIFTLESS_BATCH_MAX ?? 500);
+if (!(Number.isInteger(lanes) && lanes >= 1 && Number.isInteger(batchMax) && batchMax >= 1)) {
+  throw new Error(`DRIFTLESS_LANES and DRIFTLESS_BATCH_MAX must be whole numbers ≥ 1 (got ${lanes}, ${batchMax})`);
+}
+
+// Print every transaction as it's dispatched: noisy at high rates, handy when debugging.
+export const logTransactions = process.env.DRIFTLESS_LOG_TXNS === '1';
+
 // Crash-test knob: wait this long after handling a transaction before acking it,
 // so a test can kill the process inside that window (T03.4, T04.4).
 export const debugAckDelayMs = Number(process.env.DRIFTLESS_DEBUG_ACK_DELAY_MS ?? 0);

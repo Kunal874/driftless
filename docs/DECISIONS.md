@@ -27,6 +27,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-019 | The confirm protocol: exact end positions, idle confirms, own queue | Accepted | T03 |
 | D-020 | Document shape: exact string ids, ISO dates, partial docs merged | Accepted | T04 |
 | D-021 | Retry policy: wait out unavailability, fail-stop on rejection | Accepted | T04 |
+| D-022 | Natural batching + per-key coalescing across transactions | Accepted | T06 |
 
 ---
 
@@ -228,3 +229,22 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 - **Consequences:** a long outage means a long wait with WAL piling up behind the slot (bounded by T08's
   WAL safety). Re-sending a write after an error can apply it twice, which is harmless: writes are
   idempotent, and Meilisearch processes tasks in the order they were enqueued.
+
+### D-022 — Natural batching + per-key coalescing across transactions
+- **Decision:** (`src/pipeline/lanes.ts`, `coalesce()` in `src/sinks/meilisearch.ts`, refines D-007)
+  - A lane has **no flush timer**. When its write finishes, it sends whatever queued up meanwhile, up to
+    `batchMax` (default 500).
+  - A batch may mix changes from many transactions. It is reduced to its net effect per key: one delete,
+    or one upsert with fields merged in order. Upserts and deletes then touch different keys, so they're sent
+    as at most two writes, in parallel.
+  - Transactions are dispatched into the lanes without waiting. The checkpointer (`src/pipeline/checkpointer.ts`)
+    confirms only the end of the unbroken run of fully applied transactions.
+  - TRUNCATE waits for every lane to empty, clears the index, then dispatching continues (D-018).
+- **Why:** one Meilisearch write costs about the same for 1 document as for 500 (T04: ~100 ms each), so
+  throughput comes from writing many changes per task. A timer would add latency when the system is quiet;
+  natural batching adds none, and batches grow by themselves under load (like a database's group commit).
+- **Rejected:** a `BATCH_MS` flush timer (the original plan: extra latency with no benefit); sending a
+  batch's changes in arrival order as several writes (more tasks, no correctness gain once keys are coalesced).
+- **Consequences:** a delete followed by a re-insert of the same key collapses into one upsert. That's safe
+  because an INSERT always carries every column (unchanged-TOAST markers only appear in UPDATEs). A
+  multi-row transaction can become visible in search piece by piece, across lanes (accepted in D-007).

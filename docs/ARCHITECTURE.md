@@ -55,12 +55,12 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Demo source data | `products` schema, seed, random write workload | `db/`, `scripts/workload.sh` | T02 | ✅ |
 | Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | ✅ |
 | Stream + decoder | pgoutput messages → `Transaction`s of `Change`s | `src/source/decode.ts`, `src/main.ts` | T03 | ✅ |
-| Confirm protocol | ack handled txns at their exact end; idle confirms; keepalive replies (D-019) | `src/main.ts`, `src/source/lsn.ts` | T03 | ✅ (one txn at a time) |
+| Confirm protocol | ack applied txns at their exact end via the checkpointer; idle confirms; keepalive replies (D-019) | `src/main.ts`, `src/source/lsn.ts` | T03, T06 | ✅ |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | ✅ |
-| Meilisearch sink | per txn: merged upsert runs / delete runs / clear, each write waited to `succeeded`; retry policy D-021 | `src/sinks/meilisearch.ts` | T04 | ✅ (one txn at a time) |
+| Meilisearch sink | per lane batch: `coalesce` → ≤ 2 parallel writes (upserts, deletes), each waited to `succeeded`; `clear()` for TRUNCATE; retry policy D-021 | `src/sinks/meilisearch.ts` | T04, T06 | ✅ |
 | Reconcile + chaos | prove zero drift under crashes (self-testing checker; random SIGKILLs under load) | `scripts/reconcile.ts`, `scripts/chaos.sh` | T05 | ✅ |
-| Router, lanes, batcher | parallel apply, per-key order, coalescing | `src/pipeline/lanes.ts` | T06 | 📐 |
-| Checkpointer | safe LSN = contiguous prefix of applied transactions | `src/pipeline/checkpointer.ts` | T04 → T06 | 📐 |
+| Router, lanes, batcher | FNV-1a routing, ordered lanes, natural batching ≤ batchMax (D-022) | `src/pipeline/lanes.ts` | T06 | ✅ |
+| Checkpointer | safe LSN = end of the unbroken run of applied transactions | `src/pipeline/checkpointer.ts` | T06 | ✅ |
 | Backfill | snapshot existing rows with watermarks | `src/source/backfill.ts` | T07 | 📐 |
 | Backpressure | bounded queues, pause/resume the stream | `src/pipeline/lanes.ts` | T08 | 📐 |
 | Metrics | Prometheus endpoint, lag histogram | `src/metrics.ts` | T09 | 📐 |
@@ -121,7 +121,7 @@ driftless/
 │   ├── config.ts             connection defaults, names, debug knob (T03)
 │   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts 📐 T07
 │   ├── sinks/                document.ts, meilisearch.ts (T04)
-│   ├── pipeline/             📐 T06
+│   ├── pipeline/             lanes.ts, checkpointer.ts (T06)
 │   └── metrics.ts            📐 T09
 ├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05)
 ├── docker/grafana/         📐 T09: dashboard provisioning
