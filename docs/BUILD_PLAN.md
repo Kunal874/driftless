@@ -312,7 +312,7 @@ First reproduce the naive race, then fix it (D-008).
       provisioned from `docker/grafana/`
 - [x] T09.3 Benchmarks: pgbench at fixed rates, stepping up until lag grows without bound; batch 1 vs 500;
       lanes 1 / 4 / 8 → RESULTS.md with machine, versions and exact commands
-- [ ] T09.4 Headline chaos run ([M] updates, SIGKILL every 30 s) → reconcile = 0 → RESULTS.md
+- [x] T09.4 Headline chaos run ([M] updates, SIGKILL every 30 s) → reconcile = 0 → RESULTS.md
 - [ ] T09.5 Verify (TEST_CHECKLIST → T09), `learn/task-09-observability.md`, checkpoint
 
 **Dependencies:** `prom-client`.

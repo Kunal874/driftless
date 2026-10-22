@@ -10,9 +10,10 @@ Updated 2026-10-23, during T09 (session 1). Overwrite this at every checkpoint: 
   T09.2 ✅ (`docker compose --profile metrics up -d`: Prometheus 127.0.0.1:9090, Grafana 127.0.0.1:3000, 15-panel
   dashboard "Driftless" provisioned from `docker/grafana/`, anonymous view-only)
   T09.3 ✅ (`scripts/bench-lag.ts`; RESULTS §8 lag at 200 → ~4,800 tx/s, §9 lanes trade-off → D-027)
-- Next step: **T09.4**: headline chaos run, `scripts/chaos.sh 1200 30 1000` (20 min at 1,000 tx/s, SIGKILL ~every
-  30 s) → reconcile 0 → RESULTS §1 + claims table. 1,000 tx/s is ~⅓ of today's drain capacity (2,810 tx/s), so
-  every kill hits plenty of in-flight work without the run falling behind
+  T09.4 ✅ headline chaos run: `chaos.sh 1200 30 1000` → 1,197,314 transactions, 36 SIGKILLs, 261,113 rows =
+  documents, **0 / 0 / 0** (RESULTS §1)
+- Next step: **T09.5**: verify (TEST_CHECKLIST → T09), finish `learn/task-09-observability.md` (drafted, §9 = the
+  headline run), AGENTS.md status, tag `checkpoint/T09`
 
 ## What the system holds right now
 

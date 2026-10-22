@@ -11,6 +11,7 @@ run, with its command, date, versions and machine (CONSTRAINTS rule 7). Unmeasur
 | Not a quiet machine | other projects' containers ran at the same time (online-judge-v2, reachinbox-scheduler) |
 | Postgres / Meilisearch | 17.11 / 1.54.3 (pinned, D-010) |
 | Driftless | Node 24.18.0 (`node:24.18.0-alpine` in the `connector` service), pg-logical-replication 2.5.0, meilisearch-js 0.62.0 |
+| Metrics (T09) | prom-client 15.1.3; Prometheus 3.15.0 and Grafana 13.2.3 (profile `metrics`, not in the measured path) |
 | Data | `db/seed.sql` 100,000 rows (deterministic, D-016), workload mix 60/20/10/10 (`scripts/workload.sh`) |
 
 ---
@@ -27,6 +28,13 @@ run, with its command, date, versions and machine (CONSTRAINTS rule 7). Unmeasur
 | 2026-10-22 | `chaos.sh 180 5 5` (harsh) | 27 | 899 (0) | 99,982 = 99,982 | 0 / 0 / 0 |
 | 2026-10-22 | `chaos.sh 600 30 200` (T06: 8 lanes, batch ≤ 5000) | 20 | **119,764** (0) | 101,729 = 101,729 | 0 / 0 / 0 |
 | 2026-10-22 | `chaos.sh 180 5 200` (T06, harsh) | 30 | 35,759 (0) | 102,327 = 102,327 | 0 / 0 / 0 |
+| 2026-10-23 | **`chaos.sh 1200 30 1000` (T09 headline: 8 lanes, batch ≤ 5000)** | **36** | **1,197,314** (0) | **261,113 = 261,113** | **0 / 0 / 0** |
+
+**T09 headline run** (2026-10-23 01:58–02:18 IST): 20 minutes at 1,000 tx/s, about ⅓ of the drain capacity on
+that index (§9), so every kill threw away seconds of unconfirmed, partly applied work. 36 kills, and the connector
+log shows 36 restarts in the run window, matching Prometheus (`changes(driftless_process_start_time_seconds[21m])` =
+36). 0 fatal errors, backpressure never paused. Caught up 5.3 s after the load stopped; reconcile compared 261,113
+rows in 9.2 s.
 
 T06 runs at 200 tx/s: at that rate 60–100 transactions are in flight at any moment (stats line, §4), so every
 kill threw away unconfirmed, partly applied work. Caught up 0.5 s and 2.1 s after the load stopped; 51 connector
@@ -240,7 +248,7 @@ is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearc
 
 | Claim (BUILD_PLAN Part 0) | Status |
 |---|---|
-| 0 mismatched documents out of [N] after [M] updates/deletes while SIGKILLed every [30 s] | **measured at 200 tx/s**: 0 drift over 101,729 rows after 119,764 transactions and 20 SIGKILLs (T06); T09 repeats it as the headline run |
+| 0 mismatched documents out of [N] after [M] updates/deletes while SIGKILLed every [30 s] | **measured (T09 headline, §1)**: **0 missing / extra / mismatched out of 261,113 documents after 1,197,314 transactions at 1,000 tx/s, with 36 SIGKILLs** (~every 30 s for 20 min) |
 | End-to-end lag p99 < [X] ms at [N] writes/s | **measured (§8, §9)**: p99 **< 4 s at 500 tx/s and < 5 s at 1,000 tx/s** (commit in Postgres → searchable in Meilisearch, 8 lanes); 3.8 s at 1,000 tx/s with 1 lane. Kept up with ~4,800 tx/s, the most this machine's Postgres could generate. Lag is bounded by Meilisearch's ~1 s per-batch indexing on a 150–190k-document index |
 | Lanes + batching raised throughput from [A] to [B] | **measured**: 9 → 6,752 transactions/s (backlog drain on a ~105k-document index, §4); the same command gives 2,810 tx/s on a 195k-document index (§4 note, §9) |
 | Debugging story | BUG-001 (library ack off-by-one); **BUG-002** (backfill race: 42 docs wrong → fixed with watermarks); **BUG-003** (the watermark algorithm assumed full row images; Postgres omits unchanged TOAST → 1 doc → 0) |
