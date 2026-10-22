@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T06 — Ordered lanes, batching, checkpointer** (tag `checkpoint/T06`) |
-| Next step | **T07.1**: naive backfill (docs/BUILD_PLAN.md → T07) |
+| Last checkpoint | **T07 — Backfill** (tag `checkpoint/T07`) |
+| Next step | **T08.1**: spike: how to stop reading the replication stream (docs/BUILD_PLAN.md → T08) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

@@ -61,7 +61,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Reconcile + chaos | prove zero drift under crashes (self-testing checker; random SIGKILLs under load) | `scripts/reconcile.ts`, `scripts/chaos.sh` | T05 | ✅ |
 | Router, lanes, batcher | FNV-1a routing, ordered lanes, natural batching ≤ batchMax (D-022) | `src/pipeline/lanes.ts` | T06 | ✅ |
 | Checkpointer | safe LSN = end of the unbroken run of applied transactions | `src/pipeline/checkpointer.ts` | T06 | ✅ |
-| Backfill | snapshot existing rows between watermarks, column-aware (D-023, BUG-002/003) | `src/source/backfill.ts` | T07 | 🔨 (progress persistence: T07.4) |
+| Backfill | snapshot existing rows between watermarks, column-aware; progress saved + resumed (D-023, D-024, BUG-002/003) | `src/source/backfill.ts` | T07 | ✅ |
 | Backpressure | bounded queues, pause/resume the stream | `src/pipeline/lanes.ts` | T08 | 📐 |
 | Metrics | Prometheus endpoint, lag histogram | `src/metrics.ts` | T09 | 📐 |
 | Config | tables → index mapping, validation | `src/config.ts` | T10 | 📐 |
@@ -119,7 +119,7 @@ driftless/
 ├── src/                    the connector (tests sit next to code as *.test.ts)
 │   ├── main.ts               setup → stream → handle → confirm (T03)
 │   ├── config.ts             connection defaults, names, debug knob (T03)
-│   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts 📐 T07
+│   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07)
 │   ├── sinks/                document.ts, meilisearch.ts (T04)
 │   ├── pipeline/             lanes.ts, checkpointer.ts (T06)
 │   └── metrics.ts            📐 T09
@@ -141,4 +141,4 @@ driftless/
 | Meilisearch (host) | `http://127.0.0.1:7700`, master key `driftless-dev-master-key` (dev only) |
 | Publication / slot | `driftless_pub` / `driftless_slot` |
 | Source table / index | `public.products` / `products` |
-| Watermark table (T07) | `driftless_watermark` |
+| Driftless's own tables (T07) | `public.driftless_watermark` (published; backfill marks), `public.driftless_state` (unpublished; backfill progress) |

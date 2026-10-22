@@ -92,12 +92,14 @@ Handy commands:
 - [x] Throughput lanes = 1 vs lanes = 8 recorded in RESULTS.md (§4: 1,613 vs 4,910 tx/s at ≤ 500;
       4,682 vs 6,752 tx/s at ≤ 5000; unbatched 9 tx/s)
 
-## T07 — Backfill
+## T07 — Backfill ✅ (verified 2026-10-23)
 
-- [ ] Naive backfill under workload → reconcile > 0 drift, written up in `docs/bugs/` (the race)
-- [ ] Watermark backfill under workload → 0 drift in 10 of 10 runs
-- [ ] Kill during backfill → resumes from the last *applied* chunk; final reconcile = 0
-- [ ] Backfill duration for [N] rows recorded
+- [x] Naive backfill under workload → reconcile > 0 drift, written up in `docs/bugs/` (the race): 42 documents
+      (BUG-002); the first watermark version left 1 (BUG-003)
+- [x] Watermark backfill under workload → 0 drift in 10 of 10 runs (`DRIFTLESS_BACKFILL_CHUNK=1000
+      backfill-race.sh 300 200 150`)
+- [x] Kill during backfill → resumes from the last *applied* chunk; final reconcile = 0 (6 SIGKILLs, 6 resumes)
+- [x] Backfill duration for 105,175 rows recorded: 104 s / 23 s / 14 s at 1,000 / 5,000 / 10,000-row chunks
 
 ## T08 — Backpressure & WAL safety
 

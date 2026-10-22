@@ -62,7 +62,7 @@ atomicity inside the index. High availability (stretch S2).
 | T04 | Meilisearch sink, ack after apply | 2 | ✅ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ✅ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ✅ |
-| T07 | Backfill: naive → reproduce race → watermarks | 4 | 🔨 |
+| T07 | Backfill: naive → reproduce race → watermarks | 4 | ✅ |
 | T08 | Backpressure & WAL safety | 5 | ⬜ |
 | T09 | Observability & benchmarks | 5–6 | ⬜ |
 | T10 | Config, packaging, README, release | 6 | ⬜ |
@@ -249,7 +249,7 @@ the wiring, so every commit stays runnable.
 
 ---
 
-## T07 — Backfill 🔨
+## T07 — Backfill ✅
 
 **Goal:** index rows that existed before Driftless started, while writes continue, with zero drift.
 First reproduce the naive race, then fix it (D-008).
@@ -264,7 +264,7 @@ First reproduce the naive race, then fix it (D-008).
 - [x] T07.4 Persist progress (last *applied* key) in a small unpublished `driftless_state` table so a killed
       backfill resumes. Trigger: new/empty index, or an explicit flag.
 - [x] T07.5 Prove: same workload, 10 runs → 0 drift each; record in RESULTS.md, with backfill time for [N] rows
-- [ ] T07.6 Verify (TEST_CHECKLIST → T07), `learn/task-07-backfill.md`, checkpoint
+- [x] T07.6 Verify (TEST_CHECKLIST → T07), `learn/task-07-backfill.md`, checkpoint
 
 **Dependencies:** none new.
 
