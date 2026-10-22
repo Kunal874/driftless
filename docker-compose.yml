@@ -61,6 +61,9 @@ services:
       DRIFTLESS_BACKFILL: ${DRIFTLESS_BACKFILL:-} # 1 = backfill existing rows on start (T07)
       DRIFTLESS_BACKFILL_CHUNK: ${DRIFTLESS_BACKFILL_CHUNK:-10000}
       DRIFTLESS_BACKFILL_DEBUG_DELAY_MS: ${DRIFTLESS_BACKFILL_DEBUG_DELAY_MS:-0}
+      DRIFTLESS_METRICS_HOST: 0.0.0.0 # inside the container, so Prometheus can reach it; the host port below stays local
+    ports:
+      - "127.0.0.1:9464:9464" # GET /metrics (T09)
     volumes:
       # The repo, read-only. node_modules comes from the host: every runtime dependency is plain
       # JavaScript, so a Windows install runs fine on Linux.

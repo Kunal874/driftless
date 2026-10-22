@@ -305,7 +305,7 @@ First reproduce the naive race, then fix it (D-008).
 
 **Goal:** make freshness visible, and produce the resume numbers from real, recorded runs.
 
-- [ ] T09.1 `src/metrics.ts` + `GET /metrics` (prom-client): `driftless_lag_seconds` histogram
+- [x] T09.1 `src/metrics.ts` + `GET /metrics` (prom-client): `driftless_lag_seconds` histogram
       (sink-confirmed time − commit time), events applied by op, batch size, lane queue depth, acked LSN,
       slot retained WAL bytes
 - [ ] T09.2 Prometheus + Grafana in compose (127.0.0.1 ports; check they're free first); dashboard

@@ -5,14 +5,20 @@
 // that small one would tell Postgres the big one is done too (a confirm covers everything before it), so a
 // crash would lose it. The rule: confirm only the end of the longest unbroken run of fully applied
 // transactions, counted from the oldest one.
-export type Tracked = { endLsn: bigint; remaining: number };
+export type Tracked = { endLsn: bigint; remaining: number; committedAt: number };
 
 export class Checkpointer {
   #txns: Tracked[] = [];
   #head = 0; // index of the oldest transaction not yet confirmable
+  #onConfirmable: (txn: Tracked) => void;
 
-  track(endLsn: bigint, changes: number): Tracked {
-    const txn = { endLsn, remaining: changes };
+  // `onConfirmable` sees each transaction as it becomes confirmable: where the lag metric is measured (T09).
+  constructor(onConfirmable: (txn: Tracked) => void = () => {}) {
+    this.#onConfirmable = onConfirmable;
+  }
+
+  track(endLsn: bigint, changes: number, committedAt = Date.now()): Tracked {
+    const txn = { endLsn, remaining: changes, committedAt };
     this.#txns.push(txn);
     return txn;
   }
@@ -21,7 +27,9 @@ export class Checkpointer {
   advance(): bigint | undefined {
     let end: bigint | undefined;
     while (this.#head < this.#txns.length && this.#txns[this.#head]!.remaining === 0) {
-      end = this.#txns[this.#head]!.endLsn;
+      const txn = this.#txns[this.#head]!;
+      this.#onConfirmable(txn);
+      end = txn.endLsn;
       this.#head++;
     }
     if (this.#head > 1024 && this.#head * 2 > this.#txns.length) {

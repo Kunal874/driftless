@@ -36,6 +36,13 @@ if (!(Number.isInteger(lanes) && lanes >= 1 && Number.isInteger(batchMax) && bat
   throw new Error(`DRIFTLESS_LANES and DRIFTLESS_BATCH_MAX must be whole numbers ≥ 1 (got ${lanes}, ${batchMax})`);
 }
 
+// Prometheus metrics at http://HOST:PORT/metrics (T09). Localhost by default; the compose service listens on all
+// interfaces inside its container so the Prometheus container can reach it.
+export const metricsServer = {
+  host: process.env.DRIFTLESS_METRICS_HOST ?? '127.0.0.1',
+  port: Number(process.env.DRIFTLESS_METRICS_PORT ?? 9464),
+};
+
 // Backpressure (T08, D-025): stop reading the stream once this many changes are waiting inside Driftless
 // (stream messages not yet dispatched + changes queued in lanes); resume at half.
 export const maxPending = Number(process.env.DRIFTLESS_MAX_PENDING ?? 50_000);

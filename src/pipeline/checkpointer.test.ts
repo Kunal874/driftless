@@ -43,6 +43,19 @@ describe('Checkpointer', () => {
     expect(cp.advance()).toBe(150n);
   });
 
+  it('reports each transaction as it becomes confirmable, oldest first (for the lag metric)', () => {
+    const seen: number[] = [];
+    const cp = new Checkpointer((txn) => seen.push(txn.committedAt));
+    const t1 = cp.track(100n, 1, 1_000);
+    const t2 = cp.track(200n, 1, 2_000);
+    t2.remaining--;
+    cp.advance();
+    expect(seen).toEqual([]); // t2 is done but waits behind t1, and so does its lag
+    t1.remaining--;
+    cp.advance();
+    expect(seen).toEqual([1_000, 2_000]);
+  });
+
   it('reports what is still in flight, and keeps memory flat over many transactions', () => {
     const cp = new Checkpointer();
     for (let i = 1; i <= 5000; i++) {

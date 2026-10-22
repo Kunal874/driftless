@@ -1,13 +1,14 @@
 # Handover — where we left off
 
-Updated 2026-10-23, end of T08 (session 1). Overwrite this at every checkpoint: it describes
+Updated 2026-10-23, during T09 (session 1). Overwrite this at every checkpoint: it describes
 *now*; history lives in git.
 
 ## Current state
 
 - Last checkpoint: **T08 — Backpressure & WAL safety** (tag `checkpoint/T08`)
-- In progress: nothing
-- Next step: **T09.1**: `src/metrics.ts` + `GET /metrics` with `prom-client` (BUILD_PLAN.md → T09)
+- In progress: **T09 — Observability & benchmarks**. T09.1 ✅ (`src/metrics.ts`, `GET /metrics` on 9464)
+- Next step: **T09.2**: Prometheus `prom/prometheus:v3.15.0` + Grafana `grafana/grafana:13.2.3` (both ≥ 14 days old
+  on 2026-10-23) in compose under profile `metrics`, dashboard provisioned from `docker/grafana/`
 
 ## What the system holds right now
 
@@ -35,6 +36,11 @@ Updated 2026-10-23, end of T08 (session 1). Overwrite this at every checkpoint: 
   with Docker). Bind to `127.0.0.1`.
 - Headline numbers to produce (RESULTS.md "Resume claims"): lag p99 at fixed rates, and one long chaos run at full rate
   with reconcile.
+- **Finding at T09.1 (record it in RESULTS with T09.3):** at 200 tx/s, lag is ~2.1 s on average, all of it between 1 and
+  2.5 s. Clocks agree within 1 ms (checked from inside the connector). Cause: every Meilisearch batch takes ~560 ms
+  however small, and 420 ms of it is "post processing words > word fst" (`GET /batches` → `progressTrace`). The
+  vocabulary keeps growing because every description rewrite adds a random `md5` word. Lag ≈ 1.8 × one write
+  (`driftless_write_seconds` avg 1.19 s). This is Meilisearch on this data, not Driftless overhead; don't tune it away.
 
 ## Files changed in T08
 

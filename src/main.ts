@@ -11,6 +11,7 @@ import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
 import { createBackfill, readBackfillState } from './source/backfill.ts';
 import { nextReadState } from './pipeline/backpressure.ts';
+import { batchSize, changesApplied, gaugeOf, lag, serveMetrics, writeSeconds } from './metrics.ts';
 
 const STATS_EVERY_MS = 5_000;
 const STATUS_EVERY_MS = 10_000; // well under Postgres's wal_sender_timeout (1 min)
@@ -30,14 +31,18 @@ const service = new LogicalReplicationService(config.pgConfig, { acknowledge: { 
 const plugin = new PgoutputPlugin({ protoVersion: 1, publicationNames: [config.publication] });
 
 let stats = { txns: 0, changes: 0, writes: 0 }; // since the last stats line
-const checkpointer = new Checkpointer();
+const checkpointer = new Checkpointer((txn) => lag.observe((Date.now() - txn.committedAt) / 1000));
 const lanes = createLanes({
   count: config.lanes,
   batchMax: config.batchMax,
   apply: async (changes) => {
+    const written = writeSeconds.startTimer();
     await sink.applyBatch(changes); // returns only once Meilisearch reports the writes `succeeded`
+    written();
     stats.changes += changes.length;
     stats.writes++;
+    batchSize.observe(changes.length); // its count is the number of writes
+    for (const change of changes) changesApplied.inc({ op: change.op });
   },
   onApplied: () => {
     void confirmApplied().catch(fail);
@@ -127,7 +132,7 @@ async function drain(): Promise<void> {
 async function dispatch(txn: Transaction): Promise<void> {
   if (config.logTransactions) console.log(describe(txn));
   stats.txns++;
-  const tracked = checkpointer.track(lsnToBigInt(txn.commitEndLsn), txn.changes.length);
+  const tracked = checkpointer.track(lsnToBigInt(txn.commitEndLsn), txn.changes.length, txn.commitTime.getTime());
   for (const change of txn.changes) {
     if (change.op === 'truncate') {
       if (change.tables.includes(config.table)) {
@@ -194,6 +199,29 @@ setInterval(() => {
   stats = { txns: 0, changes: 0, writes: 0 };
 }, STATS_EVERY_MS).unref();
 
+// GET /metrics (T09). The gauges read values that live above, at scrape time.
+gaugeOf('driftless_changes_waiting', 'Changes received but not yet applied (backpressure input, D-025)',
+  () => queue.length + lanes.queued());
+gaugeOf('driftless_txns_in_flight', 'Transactions received but not yet confirmable', () => checkpointer.inFlight);
+gaugeOf('driftless_reading_paused', '1 while backpressure has paused reading the stream', () => (readingPaused ? 1 : 0));
+gaugeOf('driftless_confirmed_lsn', 'WAL position confirmed to Postgres, as a number (rate() = bytes/s)',
+  () => Number(confirmed));
+// How much WAL Postgres keeps for this slot: what a stalled Driftless costs the database (cap: 1 GB, D-026).
+const metricsDb = new pg.Pool({ ...config.pgConfig, max: 1 });
+metricsDb.on('error', () => {}); // an idle connection dropped: the next scrape reconnects
+gaugeOf('driftless_slot_retained_wal_bytes', 'WAL Postgres keeps for the slot (current position − restart_lsn)',
+  async () => {
+    try {
+      const { rows } = await metricsDb.query(
+        `SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::float8 AS bytes
+           FROM pg_replication_slots WHERE slot_name = $1`, [config.slot]);
+      return rows[0]?.bytes ?? NaN;
+    } catch {
+      return NaN; // Postgres unreachable: report "unknown", don't fail the whole scrape
+    }
+  });
+serveMetrics(config.metricsServer.host, config.metricsServer.port).on('error', fail);
+
 function fail(err: unknown): never {
   console.error('driftless: fatal:', err);
   process.exit(1); // fail-stop (D-009): nothing past an unapplied change is ever acked
@@ -237,6 +265,6 @@ async function maybeBackfill(): Promise<void> {
 }
 
 console.log(`driftless: streaming slot ${config.slot}, resuming after ${startLsn} (${config.lanes} lanes, ` +
-  `up to ${config.batchMax} changes per write)`);
+  `up to ${config.batchMax} changes per write); metrics on ${config.metricsServer.host}:${config.metricsServer.port}`);
 await service.subscribe(plugin, config.slot).catch(fail);
 if (!stopping) fail(new Error('replication stream ended unexpectedly'));
