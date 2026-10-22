@@ -10,8 +10,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 | | |
 |---|---|
 | Last checkpoint | **T01 — Foundation** (tag `checkpoint/T01`) |
-| Next step | **T02.1**: `products` schema + mount `db/` in compose (docs/BUILD_PLAN.md) |
-| Blockers | owner's approval of docs/BUILD_PLAN.md |
+| In progress | **T02**: source database & workload (see docs/HANDOVER.md for the exact step) |
+| Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this
 

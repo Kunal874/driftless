@@ -6,9 +6,9 @@ history lives in git.
 ## Current state
 
 - Last checkpoint: **T01 — Foundation** (tag `checkpoint/T01`)
-- In progress: nothing
-- Next step: **T02.1**: write `db/init/01-schema.sql` (the `products` table) and mount `db/` in
-  `docker-compose.yml` (BUILD_PLAN.md → T02)
+- In progress: **T02**. T02.1 done: `products` table created by `db/init/01-schema.sql` on a fresh
+  volume (`description` storage = EXTERNAL, verified); `db/` mounted read-only in the postgres container.
+- Next step: **T02.2**: `db/seed.sql` (BUILD_PLAN.md → T02)
 
 ## Done in session 1
 
@@ -36,10 +36,10 @@ history lives in git.
 
 ## Open issues / watch out
 
-- **Owner hasn't approved BUILD_PLAN.md yet.** The dependency approvals per task come with that approval.
-- Docker Desktop was stopped at session start. Start it before `docker compose up -d --wait`.
-- The `pgdata` volume already exists, and init scripts only run on an empty volume, so T02.1 needs
-  `docker compose down -v` once (safe: no data yet).
+- BUILD_PLAN.md approved by the owner on 2026-10-22, including every dependency it lists.
+- Docker Desktop was stopped at the start of session 1. Start it before `docker compose up -d --wait`.
+- Init scripts in `db/init/` only run on an **empty** volume. Changing the schema later means
+  `docker compose down -v` (wipes all data; ask first) or a manual migration.
 
 ## Resume prompt
 

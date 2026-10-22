@@ -57,7 +57,7 @@ atomicity inside the index. High availability (stretch S2).
 | Task | Name | Week | Status |
 |---|---|---|---|
 | T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | ✅ |
-| T02 | Source database & write workload | 1 | ⬜ |
+| T02 | Source database & write workload | 1 | 🔨 |
 | T03 | Read the WAL | 1–2 | ⬜ |
 | T04 | Meilisearch sink, ack after apply | 2 | ⬜ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ⬜ |
@@ -85,12 +85,12 @@ any session can resume from.
 
 ---
 
-## T02 — Source database & write workload ⬜
+## T02 — Source database & write workload 🔨
 
 **Goal:** a realistic `products` table, seed data and a repeatable random-write workload, so every
 later task has something to sync and something to stress it with.
 
-- [ ] T02.1 `db/init/01-schema.sql`: `products` (`id bigint generated always as identity primary key`,
+- [x] T02.1 `db/init/01-schema.sql`: `products` (`id bigint generated always as identity primary key`,
       `sku text unique not null`, `name text not null`, `description text`, `category text not null`,
       `price_cents int not null`, `stock int not null`, `updated_at timestamptz not null default now()`).
       Add `ALTER TABLE products ALTER COLUMN description SET STORAGE EXTERNAL` so big descriptions are

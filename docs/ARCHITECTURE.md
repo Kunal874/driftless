@@ -52,7 +52,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Component | Job | Planned location | Task | Status |
 |---|---|---|---|---|
 | Dev stack | Postgres (logical WAL) + Meilisearch, local only | `docker-compose.yml` | T01 | ✅ |
-| Demo source data | `products` schema, seed, random write workload | `db/` | T02 | 📐 |
+| Demo source data | `products` schema, seed, random write workload | `db/` | T02 | 🔨 |
 | Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | 📐 |
 | Stream + decoder | pgoutput messages → `ChangeEvent`s grouped per transaction | `src/source/decode.ts` | T03 | 📐 |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | 📐 |

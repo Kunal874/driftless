@@ -17,6 +17,8 @@ services:
       - "127.0.0.1:5440:5432" # host 5440: 5432-5434 are taken by other Postgres instances on this machine
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro # schema; runs only when pgdata is empty
+      - ./db:/db:ro # seed + workload SQL, used via `docker compose exec postgres ...`
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U driftless -d shop"]
       interval: 2s
