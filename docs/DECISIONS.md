@@ -28,6 +28,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-020 | Document shape: exact string ids, ISO dates, partial docs merged | Accepted | T04 |
 | D-021 | Retry policy: wait out unavailability, fail-stop on rejection | Accepted | T04 |
 | D-022 | Natural batching + per-key coalescing across transactions | Accepted | T06 |
+| D-023 | Watermark backfill: marks written through the WAL bracket each chunk | Accepted | T07 |
 
 ---
 
@@ -250,3 +251,21 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 - **Consequences:** a delete followed by a re-insert of the same key collapses into one upsert. That's safe
   because an INSERT always carries every column (unchanged-TOAST markers only appear in UPDATEs). A
   multi-row transaction can become visible in search piece by piece, across lanes (accepted in D-007).
+
+### D-023 — Watermark backfill: marks written through the WAL bracket each chunk
+- **Decision:** (`createBackfill()` in `src/source/backfill.ts`; implements D-008)
+  - Driftless owns a one-row table `public.driftless_watermark`, created on start and added to the publication.
+  - Per chunk: `UPDATE … SET mark = 'low:<uuid>'` → `SELECT` the next chunk by primary key →
+    `UPDATE … SET mark = 'high:<uuid>'`.
+  - In the stream (dispatch, commit order): from the low mark on, collect every key that changes. At the high
+    mark, push the chunk's rows **minus** those keys into the lanes, at that exact point. A TRUNCATE inside
+    the window drops the whole chunk. Marks with another uuid (e.g. replayed after a restart) are ignored.
+  - Keys are *collected* rather than removed from the chunk because the low mark can come through the stream
+    before the `SELECT` has even returned.
+- **Why:** the naive backfill let a snapshot copy, older than the moment it reached the lane, overwrite newer
+  values and resurrect deleted rows (BUG-002: 42 documents wrong). The marks make the stream itself say which
+  keys changed during the read, with no table locks and no reads of the WAL beyond what Driftless already streams.
+- **Rejected:** locking the table during each chunk (blocks the app); comparing versions at the sink (rows have
+  no reliable version number); `UPDATE t SET id = id` to push every row through the WAL (rewrites the table).
+- **Consequences:** the publication streams one extra small table, and every chunk adds two tiny UPDATEs to the WAL.
+  One chunk is in flight at a time.

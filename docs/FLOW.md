@@ -54,25 +54,29 @@ Each step lists **where it can break**. When something goes wrong, find the step
 
 ---
 
-## Flow 3 — Backfill with watermarks · 📐 (built in T07)
+## Flow 3 — Backfill with watermarks · ✅ built in T07 (D-023)
 
 Goal: index rows that existed before Driftless started, while live writes keep coming.
 
-1. Read persisted progress: the last primary key already backfilled.
-2. Write a **low watermark** L (update a row in `driftless_watermark`). It travels through
-   the WAL like any change.
-3. `SELECT` the next 1000 rows by primary key into a chunk buffer.
+1. Read persisted progress: the last primary key already backfilled (T07.4).
+2. Write a **low watermark** L (`UPDATE driftless_watermark SET mark = 'low:<uuid>'`). It travels
+   through the WAL like any change.
+3. `SELECT` the next chunk of rows by primary key.
 4. Write a **high watermark** H.
-5. In the stream: after seeing L, every change to a key that's in the chunk buffer removes that
-   key from the buffer, because the stream already has a newer value.
-6. On seeing H, emit the remaining chunk rows into the normal lanes as upserts.
-7. After they are applied, persist progress = last key of the chunk. Repeat until done.
+5. In the stream: from L on, record for every changed key **which columns** the stream sent
+   (a DELETE counts as "all"). The low mark can arrive before the SELECT returns, so keys are
+   recorded rather than removed from a chunk that may not be loaded yet.
+6. On seeing H, push the chunk into the normal lanes, at exactly that point in the stream:
+   untouched rows whole; for a changed key only the columns the stream did *not* send; nothing
+   for keys deleted or fully rewritten in the window. A TRUNCATE in the window drops the chunk.
+7. After those rows are applied, persist progress = last key of the chunk. Repeat until done.
    - *Can break:* watermark table missing from the publication (marks never arrive, so it
-     hangs); chunk rows written outside the lanes (order lost); progress saved before apply.
+     hangs); chunk rows written outside the lanes (order lost); progress saved before apply;
+     dropping a whole row for a *partial* update (BUG-003: the TOASTed value is lost).
 
-The naive version (step 3 then write straight to the sink) has a race. A chunk row read
-*before* an update can be written *after* it, putting the old value back permanently. T07
-reproduces this on purpose first.
+The naive version (SELECT, then write straight into the lanes) has a race: a chunk row read
+*before* an update can be written *after* it, putting the old value back permanently (BUG-002,
+reproduced on purpose in T07.2: 42 documents wrong).
 
 ---
 

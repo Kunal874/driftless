@@ -14,7 +14,13 @@ Updated 2026-10-22, end of T06 (session 1). Overwrite this at every checkpoint: 
   T07.2 done: **race reproduced**. `backfill-race.sh 300 200 150` → **42 drifted documents** (40 hold older
   values, 2 deleted rows resurrected); without the delay this run happened to stay clean (the window is ms wide).
   Written up in `docs/bugs/BUG-002-backfill-race.md` (repro = commit `9852dce`).
-- Next step: **T07.3**: watermark backfill (replaces `naiveBackfill`)
+  T07.3 done: `createBackfill()` (watermarks through `public.driftless_watermark`, which is created and added
+  to the publication automatically; D-023). The first run of the textbook version left **1** drift: **BUG-003**.
+  A partial (TOAST-omitting) update inside a row's own window made it drop the only copy of the description.
+  Fixed by tracking which *columns* the stream sent per key (`docs/bugs/BUG-003-watermark-toast.md`). Re-run of
+  `backfill-race.sh 300 200 150`: 42 snapshot rows dropped, 1 filled in → **0 drift**. `npm test` 41/41.
+  Not persisted yet: a killed backfill starts over only if `DRIFTLESS_BACKFILL=1`.
+- Next step: **T07.4**: persist backfill progress (`driftless_state`), resume after a kill, trigger rules
 
 ## What the system holds right now
 

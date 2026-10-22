@@ -20,7 +20,11 @@ export const slot = 'driftless_slot';
 // The table Driftless mirrors and the index it mirrors into (T10 moves this into a config file).
 export const table = 'public.products';
 export const index = { uid: 'products', primaryKey: 'id' };
-export const tables = [table];
+
+// Driftless's own one-row table for backfill watermarks (T07, D-023). It's in the publication so the marks
+// travel through the WAL in commit order; Driftless creates it if it's missing.
+export const watermarkTable = 'public.driftless_watermark';
+export const tables = [table, watermarkTable]; // everything the publication must stream
 
 // Pipeline tuning (T06): how many ordered lanes apply changes in parallel, and the most changes one
 // Meilisearch write may carry. Defaults from the T06.4 benchmarks (docs/RESULTS.md §4).

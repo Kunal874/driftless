@@ -9,7 +9,7 @@ import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
-import { naiveBackfill } from './source/backfill.ts';
+import { createBackfill } from './source/backfill.ts';
 
 const STATS_EVERY_MS = 5_000;
 
@@ -39,6 +39,16 @@ const lanes = createLanes({
   },
   onApplied: () => void confirmApplied().catch(fail),
   onError: fail,
+});
+
+const backfill = createBackfill({
+  table: config.table,
+  primaryKey: config.index.primaryKey,
+  watermarkTable: config.watermarkTable,
+  chunk: config.backfill.chunk,
+  debugDelayMs: config.backfill.debugDelayMs,
+  push: (entry) => lanes.push(entry),
+  log: (message) => console.log(message),
 });
 
 const assemble = transactionAssembler();
@@ -85,22 +95,30 @@ async function drain(): Promise<void> {
 }
 
 // Hands a transaction's changes to the lanes without waiting for them to be applied; the checkpointer
-// confirms it once every change has been. TRUNCATE is a barrier (D-018): everything before it is applied
-// first, and nothing after it is dispatched until the index has been cleared.
+// confirms it once every change has been. Every change also goes past the backfill, which needs to see the
+// stream in commit order (D-023).
 async function dispatch(txn: Transaction): Promise<void> {
   if (config.logTransactions) console.log(describe(txn));
   stats.txns++;
   const tracked = checkpointer.track(lsnToBigInt(txn.commitEndLsn), txn.changes.length);
   for (const change of txn.changes) {
     if (change.op === 'truncate') {
-      await lanes.idle();
-      await sink.clear();
+      if (change.tables.includes(config.table)) {
+        // A barrier (D-018): everything before it is applied first, nothing after it starts before the clear.
+        backfill.truncated();
+        await lanes.idle();
+        await sink.clear();
+      }
       tracked.remaining--;
+    } else if (change.table === config.watermarkTable) {
+      if (change.op !== 'delete') backfill.watermark(String(change.row.mark)); // may push a chunk into the lanes
+      tracked.remaining--; // bookkeeping only: nothing to apply
     } else {
+      backfill.rowChanged(change);
       lanes.push({ change, txn: tracked });
     }
   }
-  await confirmApplied(); // an empty or TRUNCATE-only transaction has no lane to report it
+  await confirmApplied(); // a transaction with nothing for the lanes has no lane to report it
 }
 
 // Confirms the end of the unbroken run of fully applied transactions, if it grew (ack after apply, D-006).
@@ -170,16 +188,10 @@ async function backfillNow(): Promise<void> {
   const reader = new pg.Client(config.pgConfig);
   await reader.connect();
   console.log(`backfill: starting (chunks of ${config.backfill.chunk} rows)`);
-  const { rows, ms } = await naiveBackfill(reader, {
-    table: config.table,
-    primaryKey: config.index.primaryKey,
-    chunk: config.backfill.chunk,
-    debugDelayMs: config.backfill.debugDelayMs,
-    push: (entry) => lanes.push(entry),
-    log: (message) => console.log(message),
-  });
+  const { rows, dropped, filled, ms } = await backfill.run(reader);
   await reader.end();
-  console.log(`backfill: done, ${rows} rows in ${ms} ms`);
+  console.log(`backfill: done, ${rows} rows in ${ms} ms (${dropped} snapshot rows dropped and ${filled} only ` +
+    `filled in, because the stream had newer values)`);
 }
 
 console.log(`driftless: streaming slot ${config.slot}, resuming after ${startLsn} (${config.lanes} lanes, ` +

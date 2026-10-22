@@ -258,7 +258,7 @@ First reproduce the naive race, then fix it (D-008).
       the sink, concurrently with the stream. Add a debug delay between SELECT and write to widen the race.
 - [x] T07.2 Reproduce: workload + naive backfill + reconcile → drift > 0. Write
       `docs/bugs/BUG-NNN-backfill-race.md` with the numbers (the flagship interview story).
-- [ ] T07.3 Watermark backfill (FLOW.md → Flow 3): add table `driftless_watermark` to the publication;
+- [x] T07.3 Watermark backfill (FLOW.md → Flow 3): add table `driftless_watermark` to the publication;
       low mark → SELECT chunk → high mark; drop chunk keys changed between the marks; emit the rest into
       the lanes at the high mark
 - [ ] T07.4 Persist progress (last *applied* key) in a small unpublished `driftless_state` table so a killed
