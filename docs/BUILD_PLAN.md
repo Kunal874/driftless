@@ -256,7 +256,7 @@ First reproduce the naive race, then fix it (D-008).
 
 - [x] T07.1 Naive backfill: chunked `SELECT … WHERE id > $last ORDER BY id LIMIT 1000` written straight to
       the sink, concurrently with the stream. Add a debug delay between SELECT and write to widen the race.
-- [ ] T07.2 Reproduce: workload + naive backfill + reconcile → drift > 0. Write
+- [x] T07.2 Reproduce: workload + naive backfill + reconcile → drift > 0. Write
       `docs/bugs/BUG-NNN-backfill-race.md` with the numbers (the flagship interview story).
 - [ ] T07.3 Watermark backfill (FLOW.md → Flow 3): add table `driftless_watermark` to the publication;
       low mark → SELECT chunk → high mark; drop chunk keys changed between the marks; emit the rest into
