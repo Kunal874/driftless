@@ -71,12 +71,15 @@ Handy commands:
 - [x] Killed after apply, before ack → restart replays → document equals the row (stock 93, not 94)
 - [x] 100k-row re-seed streamed through the pipeline: indexed in 4.1 s, 100,000 rows = 100,000 documents
 
-## T05 — Correctness harness
+## T05 — Correctness harness ✅ (verified 2026-10-22)
 
-- [ ] Reconcile self-test: 1 corrupted, 1 deleted and 1 extra document → reported as 1 mismatched, 1 missing, 1 extra
-- [ ] Reconcile waits for full catch-up before comparing (no false drift on a busy system)
-- [ ] Chaos run: workload + SIGKILL every 30 s for 10 min → reconcile reports 0 drift
-- [ ] Every bug found has a `docs/bugs/` note; RESULTS.md records the run (command, duration, kills, result)
+- [x] Reconcile self-test: 1 corrupted, 1 deleted and 1 extra document → reported as 1 mismatched, 1 missing,
+      1 extra; restored → 0 (`node scripts/reconcile.ts --self-test`: PASSED)
+- [x] Reconcile waits for full catch-up before comparing (slot ≥ WAL position at start + no pending Meilisearch
+      tasks); with the connector stopped it exits 2 ("couldn't check") instead of reporting drift
+- [x] Chaos run: workload + SIGKILL every ~30 s for 10 min → reconcile reports 0 drift (17 kills, 2,995 tx,
+      99,987 = 99,987); harsh run, a kill every ~5 s for 3 min → 0 drift (27 kills); 31 replays absorbed
+- [x] Every bug found has a `docs/bugs/` note (none new in T05); RESULTS.md records the runs
 
 ## T06 — Ordered lanes, batching, checkpointer
 

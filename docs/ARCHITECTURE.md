@@ -58,7 +58,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Confirm protocol | ack handled txns at their exact end; idle confirms; keepalive replies (D-019) | `src/main.ts`, `src/source/lsn.ts` | T03 | ✅ (one txn at a time) |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | ✅ |
 | Meilisearch sink | per txn: merged upsert runs / delete runs / clear, each write waited to `succeeded`; retry policy D-021 | `src/sinks/meilisearch.ts` | T04 | ✅ (one txn at a time) |
-| Reconcile + chaos | prove zero drift under crashes | `scripts/` | T05 | 📐 |
+| Reconcile + chaos | prove zero drift under crashes (self-testing checker; random SIGKILLs under load) | `scripts/reconcile.ts`, `scripts/chaos.sh` | T05 | ✅ |
 | Router, lanes, batcher | parallel apply, per-key order, coalescing | `src/pipeline/lanes.ts` | T06 | 📐 |
 | Checkpointer | safe LSN = contiguous prefix of applied transactions | `src/pipeline/checkpointer.ts` | T04 → T06 | 📐 |
 | Backfill | snapshot existing rows with watermarks | `src/source/backfill.ts` | T07 | 📐 |
@@ -123,13 +123,13 @@ driftless/
 │   ├── sinks/                document.ts, meilisearch.ts (T04)
 │   ├── pipeline/             📐 T06
 │   └── metrics.ts            📐 T09
-├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03); 📐 T05+: reconcile.ts, chaos.sh
+├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05)
 ├── docker/grafana/         📐 T09: dashboard provisioning
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md
 │   ├── DECISIONS.md   CONSTRAINTS.md  TEST_CHECKLIST.md  ROLLBACK.md
-│   ├── RESULTS.md          📐 T05+: measured numbers with exact commands
-│   └── bugs/               📐 one BUG-NNN-<slug>.md per real bug found
+│   ├── RESULTS.md          measured numbers with exact commands (since T05)
+│   └── bugs/               one BUG-NNN-<slug>.md per real bug found (BUG-001 since T03)
 └── learn/                  plain-language explanation of every finished task
 ```
 

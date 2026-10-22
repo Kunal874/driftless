@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T04 — Meilisearch sink, ack after apply** (tag `checkpoint/T04`) |
-| Next step | **T05.1**: `scripts/reconcile.ts` (docs/BUILD_PLAN.md → T05) |
+| Last checkpoint | **T05 — Correctness harness** (tag `checkpoint/T05`) |
+| Next step | **T06.1**: router + ordered lanes (docs/BUILD_PLAN.md → T06) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

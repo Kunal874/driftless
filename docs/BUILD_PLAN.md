@@ -60,7 +60,7 @@ atomicity inside the index. High availability (stretch S2).
 | T02 | Source database & write workload | 1 | ✅ |
 | T03 | Read the WAL | 1–2 | ✅ |
 | T04 | Meilisearch sink, ack after apply | 2 | ✅ |
-| T05 | Correctness harness (reconcile + chaos) | 2–3 | 🔨 |
+| T05 | Correctness harness (reconcile + chaos) | 2–3 | ✅ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ⬜ |
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ⬜ |
 | T08 | Backpressure & WAL safety | 5 | ⬜ |
@@ -187,7 +187,7 @@ after Meilisearch reports the write `succeeded`.
 
 ---
 
-## T05 — Correctness harness 🔨
+## T05 — Correctness harness ✅
 
 **Goal:** an automated, repeatable proof of "zero drift", built *before* any optimisation (D-015).
 
@@ -205,7 +205,7 @@ after Meilisearch reports the write `succeeded`.
       connector every KILL_EVERY seconds, stop the workload, run reconcile
 - [x] T05.5 First full chaos run. For every bug found: `docs/bugs/` note → fix → re-run until 0 drift.
       Create `docs/RESULTS.md` with the run.
-- [ ] T05.6 Verify (TEST_CHECKLIST → T05), `learn/task-05-correctness-harness.md`, checkpoint
+- [x] T05.6 Verify (TEST_CHECKLIST → T05), `learn/task-05-correctness-harness.md`, checkpoint
 
 **Dependencies:** none new.
 
