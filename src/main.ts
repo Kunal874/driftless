@@ -9,6 +9,7 @@ import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
+import { naiveBackfill } from './source/backfill.ts';
 
 const STATS_EVERY_MS = 5_000;
 
@@ -158,6 +159,27 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     stopping = true;
     void service.stop().then(() => process.exit(0));
   });
+}
+
+// Backfill runs alongside the stream once streaming has started (T07).
+if (config.backfill.enabled) {
+  service.once('start', () => void backfillNow().catch(fail));
+}
+
+async function backfillNow(): Promise<void> {
+  const reader = new pg.Client(config.pgConfig);
+  await reader.connect();
+  console.log(`backfill: starting (chunks of ${config.backfill.chunk} rows)`);
+  const { rows, ms } = await naiveBackfill(reader, {
+    table: config.table,
+    primaryKey: config.index.primaryKey,
+    chunk: config.backfill.chunk,
+    debugDelayMs: config.backfill.debugDelayMs,
+    push: (entry) => lanes.push(entry),
+    log: (message) => console.log(message),
+  });
+  await reader.end();
+  console.log(`backfill: done, ${rows} rows in ${ms} ms`);
 }
 
 console.log(`driftless: streaming slot ${config.slot}, resuming after ${startLsn} (${config.lanes} lanes, ` +

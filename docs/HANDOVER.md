@@ -6,8 +6,12 @@ Updated 2026-10-22, end of T06 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T06 — Ordered lanes, batching, checkpointer** (tag `checkpoint/T06`)
-- In progress: nothing
-- Next step: **T07.1**: naive backfill (BUILD_PLAN.md → T07)
+- In progress: **T07**. T07.1 done: `src/source/backfill.ts` `naiveBackfill()` (keyset chunks → lanes as
+  inserts, `countdown` waits for each chunk to be applied); `DRIFTLESS_BACKFILL=1`,
+  `DRIFTLESS_BACKFILL_CHUNK` (1000), `DRIFTLESS_BACKFILL_DEBUG_DELAY_MS` (also passed through compose);
+  `scripts/backfill-race.sh DELAY RATE SECONDS` (empty index → backfill under load → reconcile). Smoke with
+  no concurrent writes: 102,327 rows in 73 s, **0 drift**. (Slow: each chunk waits to be applied; tune later.)
+- Next step: **T07.2**: reproduce the race (`backfill-race.sh 300 200 120`) → `docs/bugs/BUG-002-…`
 
 ## What the system holds right now
 

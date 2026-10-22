@@ -62,7 +62,7 @@ atomicity inside the index. High availability (stretch S2).
 | T04 | Meilisearch sink, ack after apply | 2 | ✅ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ✅ |
 | T06 | Ordered lanes, batching, checkpointer | 3 | ✅ |
-| T07 | Backfill: naive → reproduce race → watermarks | 4 | ⬜ |
+| T07 | Backfill: naive → reproduce race → watermarks | 4 | 🔨 |
 | T08 | Backpressure & WAL safety | 5 | ⬜ |
 | T09 | Observability & benchmarks | 5–6 | ⬜ |
 | T10 | Config, packaging, README, release | 6 | ⬜ |
@@ -249,12 +249,12 @@ the wiring, so every commit stays runnable.
 
 ---
 
-## T07 — Backfill ⬜
+## T07 — Backfill 🔨
 
 **Goal:** index rows that existed before Driftless started, while writes continue, with zero drift.
 First reproduce the naive race, then fix it (D-008).
 
-- [ ] T07.1 Naive backfill: chunked `SELECT … WHERE id > $last ORDER BY id LIMIT 1000` written straight to
+- [x] T07.1 Naive backfill: chunked `SELECT … WHERE id > $last ORDER BY id LIMIT 1000` written straight to
       the sink, concurrently with the stream. Add a debug delay between SELECT and write to widen the race.
 - [ ] T07.2 Reproduce: workload + naive backfill + reconcile → drift > 0. Write
       `docs/bugs/BUG-NNN-backfill-race.md` with the numbers (the flagship interview story).

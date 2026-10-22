@@ -30,6 +30,14 @@ if (!(Number.isInteger(lanes) && lanes >= 1 && Number.isInteger(batchMax) && bat
   throw new Error(`DRIFTLESS_LANES and DRIFTLESS_BATCH_MAX must be whole numbers ≥ 1 (got ${lanes}, ${batchMax})`);
 }
 
+// Backfill (T07): index the rows that existed before Driftless started, while streaming continues.
+export const backfill = {
+  enabled: process.env.DRIFTLESS_BACKFILL === '1', // 1 = (re)index every existing row on start
+  chunk: Number(process.env.DRIFTLESS_BACKFILL_CHUNK ?? 1000), // rows read per chunk
+  // Race-test knob: wait this long between reading a chunk and writing it (T07.2).
+  debugDelayMs: Number(process.env.DRIFTLESS_BACKFILL_DEBUG_DELAY_MS ?? 0),
+};
+
 // Print every transaction as it's dispatched: noisy at high rates, handy when debugging.
 export const logTransactions = process.env.DRIFTLESS_LOG_TXNS === '1';
 
