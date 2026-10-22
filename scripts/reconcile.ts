@@ -71,7 +71,7 @@ async function compare(db: pg.Client, index: Index): Promise<Report> {
         report.missing.push(id);
         continue;
       }
-      const expected = canonical(toDocument(row));
+      const expected = canonical(toDocument(row, config.keepColumn));
       const actual = canonical(doc);
       if (expected !== actual) report.mismatched.push({ id, expected, actual });
     }
@@ -114,9 +114,10 @@ async function write(task: ReturnType<Index['updateDocuments']>): Promise<void> 
 // document, demand that compare() finds exactly those, then put everything back and demand 0 again.
 async function selfTest(db: pg.Client, index: Index): Promise<boolean> {
   if (drift(await compare(db, index)) !== 0) throw new Error('index must be in sync before the self-test');
-  const { rows: [a, b] } = await db.query(`SELECT * FROM ${config.table} ORDER BY ${config.index.primaryKey} LIMIT 2`);
-  const [idA, idB] = [String(a.id), String(b.id)];
-  await write(index.updateDocuments([{ id: idA, name: 'CORRUPTED BY SELF-TEST' }]));
+  const pk = config.index.primaryKey;
+  const { rows: [a, b] } = await db.query(`SELECT * FROM ${config.table} ORDER BY ${db.escapeIdentifier(pk)} LIMIT 2`);
+  const [idA, idB] = [String(a[pk]), String(b[pk])];
+  await write(index.updateDocuments([{ [pk]: idA, selftest_corrupted: true }])); // a field no row has
   await write(index.deleteDocuments([idB]));
   await write(index.updateDocuments([{ id: 'selftest-extra', name: 'not in Postgres' }]));
   const planted = await compare(db, index);
@@ -125,7 +126,7 @@ async function selfTest(db: pg.Client, index: Index): Promise<boolean> {
   console.log(`self-test: planted mismatch #${idA}, missing #${idB}, extra #selftest-extra → found ` +
     `${planted.mismatched.length} mismatched, ${planted.missing.length} missing, ${planted.extra.length} extra`);
 
-  await write(index.addDocuments([toDocument(a), toDocument(b)])); // replace with the true rows
+  await write(index.addDocuments([toDocument(a, config.keepColumn), toDocument(b, config.keepColumn)])); // the true rows
   await write(index.deleteDocuments(['selftest-extra']));
   const restored = drift(await compare(db, index)) === 0;
   console.log(`self-test: after restoring, drift = ${restored ? 0 : 'NOT 0'}`);

@@ -46,6 +46,19 @@ describe('coalesce (D-022)', () => {
     expect(upserts.get('8')).toStrictEqual({ id: '8', updated_at: '2026-10-22T16:00:00.123Z' });
   });
 
+  it('keeps only the configured columns, in merges and re-inserts alike (T10.1)', () => {
+    const noDescription = (column: string) => column !== 'description';
+    const { upserts } = coalesce([
+      insert('5', { name: 'Lamp', description: 'long text' }),
+      update('5', { description: 'only an excluded column changed' }),
+      update('6', { name: 'Desk' }), del('6'), insert('6', { name: 'Desk 2', description: 'x' }),
+    ], table, noDescription);
+    expect(upserts).toStrictEqual(new Map([
+      ['5', { id: '5', name: 'Lamp' }],
+      ['6', { id: '6', name: 'Desk 2' }],
+    ]));
+  });
+
   it('refuses changes for a table it does not mirror', () => {
     expect(() => coalesce([{ op: 'delete', table: 'public.orders', pk: '1' }], table)).toThrow(/doesn't mirror/);
   });

@@ -33,6 +33,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-025 | Backpressure by pausing the replication socket; safe status timer | Accepted | T08 |
 | D-026 | Cap slot WAL at 1 GB; refuse to start on a lost slot; recovery is manual | Accepted | T08 |
 | D-027 | Keep 8 lanes by default; 1 lane is the low-lag setting for Meilisearch | Accepted | T09 |
+| D-028 | Config file for what/where, env for secrets and tuning; check it before creating anything | Accepted | T10 |
 
 ---
 
@@ -335,3 +336,20 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   steady-state lag on Meilisearch. Correctness is the same either way (per-key order holds for any lane count).
 - **Revisit when:** a sink that really indexes writes in parallel (e.g. a Redis cache), or Meilisearch indexing
   batches concurrently.
+
+### D-028 — Config file for what/where, env for secrets and tuning; check it before creating anything
+- **Decision:** `driftless.config.json` (or `DRIFTLESS_CONFIG`) holds the connection without secrets, the table → index
+  mapping, the primary key and an optional column `include`/`exclude` list. `PGPASSWORD` / `MEILI_MASTER_KEY` come
+  only from the environment: the validator rejects secrets in the file and names the variable to use instead.
+  `PG*` and `MEILI_HOST` override the file; tuning knobs (`DRIFTLESS_LANES`, …) stay env-only. The file is
+  validated in full (every problem reported at once, unknown keys rejected so typos can't pass silently). Then, before
+  anything is created, it's checked against the real table: `sync.primaryKey` must be the table's primary key, and
+  every named column must exist. A config mistake prints one message and exits with 2, not a stack trace.
+- **Why:** a wrong mapping is the cheapest bug to stop at start and the most expensive to find later (silently
+  missing fields, or an index created with the wrong primary key). Found while testing T10.1: the Meilisearch check ran
+  first, so a wrong primary key with a new index name would have created that index before failing. Postgres is now
+  checked first.
+- **Column filter:** applied in `toDocument`, the one definition of a document, so the sink, backfill and reconcile all
+  agree. Proven live: `description` excluded on a separate index → backfill 274,776 rows + streamed updates/inserts →
+  reconcile 0 drift, no `description` field, no search hits on its text.
+- **Limits:** one table per Driftless; plain lower-case table names (no quoted identifiers).

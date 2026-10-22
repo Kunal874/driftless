@@ -1,0 +1,9 @@
+{
+  "postgres": { "host": "127.0.0.1", "port": 5440, "user": "driftless", "database": "shop" },
+  "meilisearch": { "host": "http://127.0.0.1:7700" },
+  "sync": {
+    "table": "public.products",
+    "index": "products",
+    "primaryKey": "id"
+  }
+}

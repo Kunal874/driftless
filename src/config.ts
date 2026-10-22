@@ -1,25 +1,62 @@
+import { readFileSync } from 'node:fs';
 import type { ClientConfig } from 'pg';
+import { columnFilter, parseConfig } from './config-file.ts';
 
-// Local-dev defaults (docker-compose.yml); the standard PG* environment variables override them.
+// What to sync where, and where to connect: the config file (T10.1, validated by parseConfig). The repo's
+// driftless.config.json holds the local-dev values; DRIFTLESS_CONFIG points to another file.
+export const configPath = process.env.DRIFTLESS_CONFIG ?? 'driftless.config.json';
+const file = (() => {
+  try {
+    return parseConfig(readConfigFile(configPath));
+  } catch (err) {
+    configError(err);
+  }
+})();
+
+// A configuration mistake isn't a crash: print just the message (no stack trace) and exit with 2.
+export function configError(err: unknown): never {
+  console.error(`driftless: ${(err as Error).message}\n(config file: ${configPath})`);
+  process.exit(2);
+}
+
+function readConfigFile(path: string): unknown {
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (err) {
+    throw new Error(`can't read the config file (${(err as NodeJS.ErrnoException).code ?? (err as Error).message}); run from the repo root or set DRIFTLESS_CONFIG`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`the config file isn't valid JSON: ${(err as Error).message}`);
+  }
+}
+
+// The standard PG* environment variables override the file. Passwords never come from the file: the defaults below
+// are the local-dev ones from docker-compose.yml.
 export const pgConfig: ClientConfig = {
-  host: process.env.PGHOST ?? '127.0.0.1',
-  port: Number(process.env.PGPORT ?? 5440),
-  user: process.env.PGUSER ?? 'driftless',
+  host: process.env.PGHOST ?? file.postgres.host,
+  port: Number(process.env.PGPORT ?? file.postgres.port),
+  user: process.env.PGUSER ?? file.postgres.user,
   password: process.env.PGPASSWORD ?? 'driftless',
-  database: process.env.PGDATABASE ?? 'shop',
+  database: process.env.PGDATABASE ?? file.postgres.database,
 };
+if (!Number.isInteger(pgConfig.port)) throw new Error(`PGPORT must be a whole number (got '${process.env.PGPORT}')`);
 
 export const meilisearch = {
-  host: process.env.MEILI_HOST ?? 'http://127.0.0.1:7700',
+  host: process.env.MEILI_HOST ?? file.meilisearch.host,
   apiKey: process.env.MEILI_MASTER_KEY ?? 'driftless-dev-master-key',
 };
 
 export const publication = 'driftless_pub';
 export const slot = 'driftless_slot';
 
-// The table Driftless mirrors and the index it mirrors into (T10 moves this into a config file).
-export const table = 'public.products';
-export const index = { uid: 'products', primaryKey: 'id' };
+// The table Driftless mirrors, the index it mirrors into, and which columns become document fields.
+export const table = file.sync.table;
+export const index = { uid: file.sync.index, primaryKey: file.sync.primaryKey };
+export const keepColumn = columnFilter(file.sync.columns);
+export const namedColumns = file.sync.columns ? Object.values(file.sync.columns)[0]! : []; // checked against the table
 
 // Driftless's own one-row table for backfill watermarks (T07, D-023). It's in the publication so the marks
 // travel through the WAL in commit order; Driftless creates it if it's missing.

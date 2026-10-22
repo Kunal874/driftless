@@ -3,7 +3,7 @@ import pg from 'pg';
 import { Meilisearch } from 'meilisearch';
 import { LogicalReplicationService, PgoutputPlugin, type Pgoutput } from 'pg-logical-replication';
 import * as config from './config.ts';
-import { ensureReplicationSetup } from './source/replication.ts';
+import { checkSync, ensureReplicationSetup } from './source/replication.ts';
 import { transactionAssembler, type Transaction } from './source/decode.ts';
 import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
@@ -16,12 +16,16 @@ import { batchSize, changesApplied, gaugeOf, lag, serveMetrics, writeSeconds } f
 const STATS_EVERY_MS = 5_000;
 const STATUS_EVERY_MS = 10_000; // well under Postgres's wal_sender_timeout (1 min)
 
-const meili = new Meilisearch(config.meilisearch);
-await ensureIndex(meili, config.index.uid, config.index.primaryKey);
-const sink = meilisearchSink(meili.index(config.index.uid), config.table);
-
+// The config is checked against the real table before anything is created anywhere (an index with the wrong
+// primary key, a slot that starts holding WAL).
 const db = new pg.Client(config.pgConfig);
 await db.connect();
+await checkSync(db, config.table, config.index.primaryKey, config.namedColumns).catch(config.configError);
+
+const meili = new Meilisearch(config.meilisearch);
+await ensureIndex(meili, config.index.uid, config.index.primaryKey);
+const sink = meilisearchSink(meili.index(config.index.uid), config.table, config.keepColumn);
+
 const startLsn = await ensureReplicationSetup(db, config);
 await db.end();
 

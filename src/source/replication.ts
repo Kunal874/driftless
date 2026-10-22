@@ -72,6 +72,27 @@ function lostSlotHelp(slot: string, confirmed: string): string {
   ].join('\n');
 }
 
+// The config file's mapping must match the real table (T10.1): sync.primaryKey is the table's primary key, and every
+// column sync.columns names exists. Caught here, at start, instead of as silently missing fields later.
+export async function checkSync(db: Client, table: string, primaryKey: string, named: string[]): Promise<void> {
+  const { rows } = await db.query<{ name: string; is_pk: boolean }>(
+    `SELECT a.attname AS name, coalesce(a.attnum = ANY (i.indkey), false) AS is_pk
+       FROM pg_attribute a LEFT JOIN pg_index i ON i.indrelid = a.attrelid AND i.indisprimary
+      WHERE a.attrelid = to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped`,
+    [table],
+  );
+  if (rows.length === 0) throw new Error(`config: sync.table ${table} not found`);
+  const pk = rows.find((row) => row.is_pk)?.name;
+  if (pk !== primaryKey) {
+    throw new Error(`config: sync.primaryKey is '${primaryKey}', but the primary key of ${table} is '${pk}'`);
+  }
+  const unknown = named.filter((column) => !rows.some((row) => row.name === column));
+  if (unknown.length > 0) {
+    throw new Error(`config: sync.columns names ${unknown.map((c) => `'${c}'`).join(', ')}, which ${table} doesn't have ` +
+      `(its columns: ${rows.map((row) => row.name).join(', ')})`);
+  }
+}
+
 // Driftless needs exactly one primary-key column per table: its value becomes the document id, and
 // logical replication uses it to say which row an UPDATE or DELETE touched.
 async function checkTable(db: Client, table: string): Promise<void> {

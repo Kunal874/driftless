@@ -8,8 +8,11 @@ export type Document = Record<string, unknown>;
 // - bigint ids are already exact strings, because `pg` parses int8 as text.
 // - Only columns present in the row appear. An update whose big unchanged (TOAST) columns weren't sent
 //   gives a partial document, which Meilisearch merges into the existing one.
-export function toDocument(row: Row): Document {
+// - Only columns `keep` accepts appear (the config file's sync.columns, T10.1).
+export function toDocument(row: Row, keep: (column: string) => boolean = () => true): Document {
   return Object.fromEntries(
-    Object.entries(row).map(([column, value]) => [column, value instanceof Date ? value.toISOString() : value]),
+    Object.entries(row)
+      .filter(([column]) => keep(column))
+      .map(([column, value]) => [column, value instanceof Date ? value.toISOString() : value]),
   );
 }

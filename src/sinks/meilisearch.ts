@@ -34,7 +34,11 @@ export async function ensureIndex(client: Meilisearch, uid: string, primaryKey: 
 // keys, so they can be written in any order, even at the same time.
 // A delete followed by an upsert of the same key can only be a re-INSERT, which carries every column, so
 // that upsert is a whole row: merging it onto the stale document gives the same result as replacing it.
-export function coalesce(changes: RowChange[], table: string): { upserts: Map<string, Document>; deletes: Set<string> } {
+export function coalesce(
+  changes: RowChange[],
+  table: string,
+  keep?: (column: string) => boolean, // which columns become fields (config sync.columns); default: all
+): { upserts: Map<string, Document>; deletes: Set<string> } {
   const upserts = new Map<string, Document>();
   const deletes = new Set<string>();
   for (const change of changes) {
@@ -43,9 +47,9 @@ export function coalesce(changes: RowChange[], table: string): { upserts: Map<st
       upserts.delete(change.pk);
       deletes.add(change.pk);
     } else if (deletes.delete(change.pk)) {
-      upserts.set(change.pk, toDocument(change.row)); // re-inserted after a delete: the whole row
+      upserts.set(change.pk, toDocument(change.row, keep)); // re-inserted after a delete: the whole row
     } else {
-      upserts.set(change.pk, { ...upserts.get(change.pk), ...toDocument(change.row) });
+      upserts.set(change.pk, { ...upserts.get(change.pk), ...toDocument(change.row, keep) });
     }
   }
   return { upserts, deletes };
@@ -53,10 +57,10 @@ export function coalesce(changes: RowChange[], table: string): { upserts: Map<st
 
 // Writes to the index. Each call returns only once Meilisearch has really applied the writes, so the
 // caller may count those changes as applied (ack after apply, invariant 1).
-export function meilisearchSink(index: Index, table: string) {
+export function meilisearchSink(index: Index, table: string, keep: (column: string) => boolean) {
   return {
     async applyBatch(changes: RowChange[]): Promise<void> {
-      const { upserts, deletes } = coalesce(changes, table);
+      const { upserts, deletes } = coalesce(changes, table, keep);
       const writes: Promise<void>[] = [];
       if (deletes.size > 0) {
         const ids = [...deletes];
