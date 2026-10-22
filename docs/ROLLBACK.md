@@ -41,8 +41,11 @@ git log --oneline --grep "T04\."     # every commit of task T04
   slot. Ask first.
 - Full fresh start: `docker compose down -v && docker compose up -d --wait`
   (from T02, Postgres re-runs `db/init/*.sql` on the empty volume).
-- Reset only the search index: delete the `products` index in Meilisearch. From T07, Driftless
-  re-backfills on start.
+- Reset only the search index: delete the `products` index in Meilisearch. On its next start, Driftless sees
+  an empty index for a non-empty table and backfills it by itself (D-024).
+- Force a fresh backfill (e.g. after a mapping change): stop Driftless, then
+  `DELETE FROM driftless_state WHERE name = 'backfill';`, then start it with `DRIFTLESS_BACKFILL=1`. Without
+  the DELETE, an interrupted backfill would *resume* instead of starting over.
 
 ## The replication slot (important)
 

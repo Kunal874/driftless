@@ -29,6 +29,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-021 | Retry policy: wait out unavailability, fail-stop on rejection | Accepted | T04 |
 | D-022 | Natural batching + per-key coalescing across transactions | Accepted | T06 |
 | D-023 | Watermark backfill: marks written through the WAL bracket each chunk | Accepted | T07 |
+| D-024 | Backfill progress in an unpublished table; resume beats request | Accepted | T07 |
 
 ---
 
@@ -268,4 +269,17 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 - **Rejected:** locking the table during each chunk (blocks the app); comparing versions at the sink (rows have
   no reliable version number); `UPDATE t SET id = id` to push every row through the WAL (rewrites the table).
 - **Consequences:** the publication streams one extra small table, and every chunk adds two tiny UPDATEs to the WAL.
-  One chunk is in flight at a time.
+  One chunk is in flight at a time. Postgres UPDATEs omit unchanged TOASTed columns, so the window tracks *columns*
+  per key, not just keys (BUG-003).
+
+### D-024 — Backfill progress in an unpublished table; resume beats request
+- **Decision:** `public.driftless_state` (created by Driftless, **not** in the publication) holds
+  `{"status":"running","after":<last applied key>}` or `{"status":"done",…}`. It's saved after each chunk is
+  *applied*. On start: an interrupted backfill is **resumed**; otherwise `DRIFTLESS_BACKFILL=1` starts one;
+  otherwise an empty index for a non-empty table starts one by itself.
+- **Why:** a killed backfill must not start over (a crash loop would never finish), and it must never skip a
+  chunk: saving progress after apply means the interrupted chunk is simply read again. Resume wins over the
+  env flag because a supervisor restarts the container with the same environment. The empty-index rule covers
+  first-time indexing and an accidentally deleted index.
+- **Consequences:** to force a fresh backfill, delete the `backfill` row and start with `DRIFTLESS_BACKFILL=1`
+  (ROLLBACK.md). The state table is unpublished, so its writes never come back through the stream.

@@ -20,7 +20,12 @@ Updated 2026-10-22, end of T06 (session 1). Overwrite this at every checkpoint: 
   Fixed by tracking which *columns* the stream sent per key (`docs/bugs/BUG-003-watermark-toast.md`). Re-run of
   `backfill-race.sh 300 200 150`: 42 snapshot rows dropped, 1 filled in → **0 drift**. `npm test` 41/41.
   Not persisted yet: a killed backfill starts over only if `DRIFTLESS_BACKFILL=1`.
-- Next step: **T07.4**: persist backfill progress (`driftless_state`), resume after a kill, trigger rules
+  T07.4 done: progress in unpublished `public.driftless_state` (saved after each *applied* chunk); start rules
+  (D-024): resume an interrupted backfill > `DRIFTLESS_BACKFILL=1` > empty index with a non-empty table.
+  `backfill-race.sh` now resets the state when it empties the index and takes a 4th arg KILL_EVERY_S. Live:
+  `backfill-race.sh 300 200 150 20` → 6 SIGKILLs, each restart resumed after the last applied id → **0 drift**.
+  `npm test` 42/42.
+- Next step: **T07.5**: chunk-size timing (1000 vs 5000) and 10 proof runs of `backfill-race.sh 300 200 150`
 
 ## What the system holds right now
 

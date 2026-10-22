@@ -9,7 +9,7 @@ import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
-import { createBackfill } from './source/backfill.ts';
+import { createBackfill, readBackfillState } from './source/backfill.ts';
 
 const STATS_EVERY_MS = 5_000;
 
@@ -45,6 +45,7 @@ const backfill = createBackfill({
   table: config.table,
   primaryKey: config.index.primaryKey,
   watermarkTable: config.watermarkTable,
+  stateTable: config.stateTable,
   chunk: config.backfill.chunk,
   debugDelayMs: config.backfill.debugDelayMs,
   push: (entry) => lanes.push(entry),
@@ -179,16 +180,30 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   });
 }
 
-// Backfill runs alongside the stream once streaming has started (T07).
-if (config.backfill.enabled) {
-  service.once('start', () => void backfillNow().catch(fail));
-}
+// A backfill runs alongside the stream once streaming has started (T07). Its marks only make sense in the
+// stream, so it can't start before the stream does.
+service.once('start', () => void maybeBackfill().catch(fail));
 
-async function backfillNow(): Promise<void> {
+async function maybeBackfill(): Promise<void> {
   const reader = new pg.Client(config.pgConfig);
   await reader.connect();
-  console.log(`backfill: starting (chunks of ${config.backfill.chunk} rows)`);
-  const { rows, dropped, filled, ms } = await backfill.run(reader);
+  const state = await readBackfillState(reader, config.stateTable);
+  let from: string | null | undefined; // undefined = no backfill this time
+  if (state?.status === 'running') {
+    from = state.after; // an earlier backfill was interrupted: resume after the last applied chunk
+  } else if (config.backfill.enabled) {
+    from = null; // asked for: DRIFTLESS_BACKFILL=1
+  } else {
+    const { rows: [{ has_rows }] } = await reader.query(`SELECT EXISTS (SELECT 1 FROM ${config.table}) AS has_rows`);
+    const empty = (await meili.index(config.index.uid).getStats()).numberOfDocuments === 0;
+    if (empty && has_rows) from = null; // an empty index for a table with rows: first start, or a deleted index
+  }
+  if (from === undefined) {
+    await reader.end();
+    return;
+  }
+  console.log(from === null ? `backfill: starting (chunks of ${config.backfill.chunk} rows)` : `backfill: resuming after id ${from}`);
+  const { rows, dropped, filled, ms } = await backfill.run(reader, from);
   await reader.end();
   console.log(`backfill: done, ${rows} rows in ${ms} ms (${dropped} snapshot rows dropped and ${filled} only ` +
     `filled in, because the stream had newer values)`);

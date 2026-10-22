@@ -1,11 +1,14 @@
 import type { Client } from 'pg';
 
-type Setup = { publication: string; slot: string; tables: string[]; watermarkTable: string };
+type Setup = { publication: string; slot: string; tables: string[]; watermarkTable: string; stateTable: string };
 
 // Gets Postgres ready for streaming, and is safe to run on every start: checks the settings Driftless
-// depends on, then creates the watermark table, the publication and the slot only if they're missing.
+// depends on, then creates its own two tables, the publication and the slot only if they're missing.
 // Returns the slot's confirmed position: everything before it has already been handled.
-export async function ensureReplicationSetup(db: Client, { publication, slot, tables, watermarkTable }: Setup): Promise<string> {
+export async function ensureReplicationSetup(
+  db: Client,
+  { publication, slot, tables, watermarkTable, stateTable }: Setup,
+): Promise<string> {
   const { rows: [wal] } = await db.query<{ wal_level: string }>('SHOW wal_level');
   if (wal.wal_level !== 'logical') {
     throw new Error(`wal_level is '${wal.wal_level}' but must be 'logical' (see docker-compose.yml)`);
@@ -15,6 +18,8 @@ export async function ensureReplicationSetup(db: Client, { publication, slot, ta
   // Driftless's own one-row table: backfill watermarks are updates to it (D-023).
   await db.query(`CREATE TABLE IF NOT EXISTS ${qualified(watermarkTable)} (id int PRIMARY KEY, mark text NOT NULL)`);
   await db.query(`INSERT INTO ${qualified(watermarkTable)} VALUES (1, '') ON CONFLICT (id) DO NOTHING`);
+  // Progress notes, e.g. how far a backfill got (T07.4). Deliberately not in the publication.
+  await db.query(`CREATE TABLE IF NOT EXISTS ${qualified(stateTable)} (name text PRIMARY KEY, value jsonb NOT NULL)`);
 
   for (const table of tables) await checkTable(db, table);
 

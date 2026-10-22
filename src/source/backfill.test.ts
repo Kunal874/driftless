@@ -35,8 +35,10 @@ function setup(chunks: Row[][], onMark: (mark: string, bf: ReturnType<typeof cre
   const pushed: string[] = [];
   const pushedRows: Row[] = [];
   const selectedAfter: unknown[] = [];
+  const saved: unknown[] = [];
   const bf = createBackfill({
-    table, primaryKey: 'id', watermarkTable: 'public.driftless_watermark', chunk: 3, debugDelayMs: 0,
+    table, primaryKey: 'id', watermarkTable: 'public.driftless_watermark', stateTable: 'public.driftless_state',
+    chunk: 3, debugDelayMs: 0,
     push: (entry) => { // "applied" at once
       pushed.push(entry.change.pk);
       if (entry.change.op !== 'delete') pushedRows.push(entry.change.row);
@@ -56,10 +58,14 @@ function setup(chunks: Row[][], onMark: (mark: string, bf: ReturnType<typeof cre
         selectedAfter.push(params[0]);
         return { rows: chunks.shift() ?? [] };
       }
+      if (sql.startsWith('INSERT INTO "public"."driftless_state"')) {
+        saved.push({ ...JSON.parse(String(params[0])), pushedSoFar: pushed.length });
+        return { rows: [] };
+      }
       throw new Error(`unexpected query: ${sql}`);
     },
   } as unknown as Client;
-  return { bf, db, pushed, pushedRows, selectedAfter };
+  return { bf, db, pushed, pushedRows, selectedAfter, saved };
 }
 
 describe('createBackfill (watermarks, D-023)', () => {
@@ -71,7 +77,7 @@ describe('createBackfill (watermarks, D-023)', () => {
         b.rowChanged(del(3)); // deleted while the chunk was being read: must not come back
       }
     });
-    const result = await bf.run(db);
+    const result = await bf.run(db, null);
     expect(pushed).toEqual(['1']);
     expect(result).toMatchObject({ rows: 1, dropped: 2, filled: 0 });
   });
@@ -82,7 +88,7 @@ describe('createBackfill (watermarks, D-023)', () => {
       // A price-style update: Postgres didn't resend the big unchanged description (TOAST).
       if (mark.startsWith('low:')) b.rowChanged(update(2, { name: 'renamed' }));
     });
-    const result = await bf.run(db);
+    const result = await bf.run(db, null);
     expect(pushedRows).toStrictEqual([
       row(1), // untouched: the whole snapshot row
       { id: '2', description: 'long text 2' }, // only what the stream didn't carry; `name` comes from the stream
@@ -96,7 +102,7 @@ describe('createBackfill (watermarks, D-023)', () => {
       b.watermark(mark);
       if (mark.startsWith('high:')) b.rowChanged(del(3)); // after the chunk was pushed: lands behind it in the lane
     });
-    await bf.run(db);
+    await bf.run(db, null);
     expect(pushed).toEqual(['1', '2', '3']);
   });
 
@@ -109,7 +115,7 @@ describe('createBackfill (watermarks, D-023)', () => {
       }
       b.watermark(mark);
     });
-    await bf.run(db);
+    await bf.run(db, null);
     expect(pushed).toEqual(['1', '2']);
   });
 
@@ -119,13 +125,25 @@ describe('createBackfill (watermarks, D-023)', () => {
       b.watermark(mark);
       if (mark.startsWith('low:') && ++lowMarks === 1) b.truncated(); // only inside the first chunk's window
     });
-    await bf.run(db);
+    await bf.run(db, null);
     expect(pushed).toEqual(['4']); // rows 1–3 were read before the TRUNCATE: they no longer exist
+  });
+
+  it('saves progress only after a chunk is applied, and resumes after the saved key', async () => {
+    const { bf, db, saved, selectedAfter } = setup([[row(5), row(6), row(7)], [row(8)]], (mark, b) => b.watermark(mark));
+    await bf.run(db, '4'); // resuming: rows up to id 4 were done by an earlier, killed run
+    expect(selectedAfter[0]).toBe('4');
+    expect(saved).toMatchObject([
+      { status: 'running', after: '4', pushedSoFar: 0 }, // before anything new
+      { status: 'running', after: '7', pushedSoFar: 3 }, // only once rows 5–7 were applied
+      { status: 'running', after: '8', pushedSoFar: 4 },
+      { status: 'done', rows: 4 },
+    ]);
   });
 
   it('walks the table chunk by chunk in primary-key order', async () => {
     const { bf, db, pushed, selectedAfter } = setup([[row(1), row(2), row(3)], [row(4)]], (mark, b) => b.watermark(mark));
-    expect(await bf.run(db)).toMatchObject({ rows: 4, dropped: 0 });
+    expect(await bf.run(db, null)).toMatchObject({ rows: 4, dropped: 0 });
     expect(pushed).toEqual(['1', '2', '3', '4']);
     expect(selectedAfter).toEqual([null, '3', '4']); // the last query finds nothing and ends the backfill
   });

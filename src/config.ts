@@ -25,6 +25,8 @@ export const index = { uid: 'products', primaryKey: 'id' };
 // travel through the WAL in commit order; Driftless creates it if it's missing.
 export const watermarkTable = 'public.driftless_watermark';
 export const tables = [table, watermarkTable]; // everything the publication must stream
+// Driftless's own progress notes (backfill position). NOT published: its writes never echo back.
+export const stateTable = 'public.driftless_state';
 
 // Pipeline tuning (T06): how many ordered lanes apply changes in parallel, and the most changes one
 // Meilisearch write may carry. Defaults from the T06.4 benchmarks (docs/RESULTS.md §4).
@@ -36,7 +38,10 @@ if (!(Number.isInteger(lanes) && lanes >= 1 && Number.isInteger(batchMax) && bat
 
 // Backfill (T07): index the rows that existed before Driftless started, while streaming continues.
 export const backfill = {
-  enabled: process.env.DRIFTLESS_BACKFILL === '1', // 1 = (re)index every existing row on start
+  // 1 = start a backfill on start (resumed instead if one was interrupted). Without it, one starts by itself
+  // when the index is empty but the table isn't. To force a fresh one: delete the 'backfill' row from
+  // driftless_state and start with this set.
+  enabled: process.env.DRIFTLESS_BACKFILL === '1',
   chunk: Number(process.env.DRIFTLESS_BACKFILL_CHUNK ?? 1000), // rows read per chunk
   // Race-test knob: wait this long between reading a chunk and writing it (T07.2).
   debugDelayMs: Number(process.env.DRIFTLESS_BACKFILL_DEBUG_DELAY_MS ?? 0),

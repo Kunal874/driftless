@@ -23,10 +23,20 @@ export function countdown(n: number): { txn: { remaining: number }; done: Promis
 
 type Row = Record<string, unknown>;
 
+export type BackfillState = { status: 'running'; after: string | null } | { status: 'done'; rows: number; finishedAt: string };
+
+// Reads where the last backfill got to (null when there has never been one).
+export async function readBackfillState(db: Client, stateTable: string): Promise<BackfillState | null> {
+  const q = stateTable.split('.').map((part) => db.escapeIdentifier(part)).join('.');
+  const { rows } = await db.query<{ value: BackfillState }>(`SELECT value FROM ${q} WHERE name = 'backfill'`);
+  return rows[0]?.value ?? null;
+}
+
 type Options = {
   table: string; // e.g. "public.products"
   primaryKey: string;
   watermarkTable: string;
+  stateTable: string;
   chunk: number;
   debugDelayMs: number;
   push: (entry: Entry) => void; // into the same lanes the stream uses, so each key keeps one queue
@@ -56,7 +66,7 @@ type Window = {
 // (TOASTed) value in an UPDATE. If such an update lands inside the window and the whole snapshot row were
 // dropped, the snapshot's copy of that value, the only one left, would be lost. So for a changed key only the
 // columns no window change sent are pushed. Those didn't change: a changed value is always sent in full.
-export function createBackfill({ table, primaryKey, watermarkTable, chunk, debugDelayMs, push, log }: Options) {
+export function createBackfill({ table, primaryKey, watermarkTable, stateTable, chunk, debugDelayMs, push, log }: Options) {
   let window: Window | undefined;
 
   return {
@@ -101,13 +111,21 @@ export function createBackfill({ table, primaryKey, watermarkTable, chunk, debug
       if (window?.open) window.truncated = true; // every row the chunk read is gone
     },
 
-    // Copies every existing row, chunk by chunk, in primary-key order. `db` is a normal SQL connection.
-    async run(db: Client): Promise<{ rows: number; dropped: number; filled: number; ms: number }> {
+    // Copies every row after `from` (null = from the start), chunk by chunk, in primary-key order. `db` is a
+    // normal SQL connection. Progress is saved after each chunk has been *applied*, never just read, so a killed
+    // backfill resumes by reading that chunk again (T07.4).
+    async run(db: Client, from: string | null): Promise<{ rows: number; dropped: number; filled: number; ms: number }> {
       const q = (name: string) => name.split('.').map((part) => db.escapeIdentifier(part)).join('.');
       const pk = db.escapeIdentifier(primaryKey);
       const setMark = (mark: string) => db.query(`UPDATE ${q(watermarkTable)} SET mark = $1 WHERE id = 1`, [mark]);
+      const save = (state: BackfillState) =>
+        db.query(
+          `INSERT INTO ${q(stateTable)} (name, value) VALUES ('backfill', $1) ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value`,
+          [JSON.stringify(state)],
+        );
       const started = Date.now();
-      let after: string | null = null;
+      let after = from;
+      await save({ status: 'running', after });
       let total = 0;
       let dropped = 0;
       let filledTotal = 0;
@@ -131,9 +149,11 @@ export function createBackfill({ table, primaryKey, watermarkTable, chunk, debug
         filledTotal += filled;
         total += pushed;
         after = String(rows.at(-1)![primaryKey]);
+        await save({ status: 'running', after });
         if (Math.floor(total / 20_000) > Math.floor((total - pushed) / 20_000)) log(`backfill: ${total} rows so far`);
       }
       window = undefined;
+      await save({ status: 'done', rows: total, finishedAt: new Date().toISOString() });
       return { rows: total, dropped, filled: filledTotal, ms: Date.now() - started };
     },
   };

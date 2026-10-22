@@ -261,7 +261,7 @@ First reproduce the naive race, then fix it (D-008).
 - [x] T07.3 Watermark backfill (FLOW.md → Flow 3): add table `driftless_watermark` to the publication;
       low mark → SELECT chunk → high mark; drop chunk keys changed between the marks; emit the rest into
       the lanes at the high mark
-- [ ] T07.4 Persist progress (last *applied* key) in a small unpublished `driftless_state` table so a killed
+- [x] T07.4 Persist progress (last *applied* key) in a small unpublished `driftless_state` table so a killed
       backfill resumes. Trigger: new/empty index, or an explicit flag.
 - [ ] T07.5 Prove: same workload, 10 runs → 0 drift each; record in RESULTS.md, with backfill time for [N] rows
 - [ ] T07.6 Verify (TEST_CHECKLIST → T07), `learn/task-07-backfill.md`, checkpoint
