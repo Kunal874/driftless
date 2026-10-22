@@ -6,9 +6,12 @@ history lives in git.
 ## Current state
 
 - Last checkpoint: **T01 — Foundation** (tag `checkpoint/T01`)
-- In progress: **T02**. T02.1 done: `products` table created by `db/init/01-schema.sql` on a fresh
-  volume (`description` storage = EXTERNAL, verified); `db/` mounted read-only in the postgres container.
-- Next step: **T02.2**: `db/seed.sql` (BUILD_PLAN.md → T02)
+- In progress: **T02**.
+  - T02.1 done: `products` table created by `db/init/01-schema.sql` on a fresh volume (`description`
+    storage = EXTERNAL, verified); `db/` mounted read-only in the postgres container.
+  - T02.2 done: `db/seed.sql` seeded 100,000 rows in ~1.9 s; 5,132 big descriptions; table 13 MB +
+    TOAST 13 MB; two runs → identical checksum (deterministic).
+- Next step: **T02.3**: pgbench workload scripts + `scripts/workload.sh` (BUILD_PLAN.md → T02)
 
 ## Done in session 1
 
@@ -38,6 +41,8 @@ history lives in git.
 
 - BUILD_PLAN.md approved by the owner on 2026-10-22, including every dependency it lists.
 - Docker Desktop was stopped at the start of session 1. Start it before `docker compose up -d --wait`.
+- Git Bash rewrites container paths: `docker compose exec … -f /db/seed.sql` fails unless prefixed with
+  `MSYS_NO_PATHCONV=1` (hit and confirmed in T02.2).
 - Init scripts in `db/init/` only run on an **empty** volume. Changing the schema later means
   `docker compose down -v` (wipes all data; ask first) or a manual migration.
 

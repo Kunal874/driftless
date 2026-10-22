@@ -21,6 +21,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-013 | Single author, enforced by a commit-msg hook | Accepted | T01 |
 | D-014 | One branch, one commit per step, checkpoint tags | Accepted | T01 |
 | D-015 | Correctness harness before performance work | Accepted | plan |
+| D-016 | Deterministic seed data + one workload definition | Accepted | T02 |
 
 ---
 
@@ -152,3 +153,11 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 - **Decision:** build reconcile + chaos testing (T05) before lanes and batching (T06).
 - **Why:** a fast pipeline you can't prove correct is worthless. With the harness in place, every
   optimisation is checked for drift the moment it lands.
+
+### D-016 — Deterministic seed data + one workload definition
+- **Decision:** `db/seed.sql` calls `setseed(0.42)`, so the same row count always produces identical data
+  (verified: two runs, same checksum). The write workload's mix and weights are defined in exactly one
+  place, `scripts/workload.sh` + `db/workload/*.sql`, and every test and benchmark runs through it.
+- **Why:** benchmark and chaos numbers are only comparable if the data and the load are the same each time.
+- **Consequences:** changing the seed, the mix or the weights makes earlier RESULTS.md numbers
+  incomparable. Do it only deliberately, and note it in RESULTS.md.

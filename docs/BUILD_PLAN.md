@@ -97,10 +97,11 @@ later task has something to sync and something to stress it with.
       stored out-of-line uncompressed (forces the TOAST case). Mount in compose:
       `./db/init:/docker-entrypoint-initdb.d:ro` and `./db:/db:ro`. Re-create the volume once
       (`docker compose down -v`; safe now, there's no data yet).
-- [ ] T02.2 `db/seed.sql`: `INSERT … SELECT … FROM generate_series(1, :rows)` with random names,
+- [x] T02.2 `db/seed.sql`: `INSERT … SELECT … FROM generate_series(1, :rows)` with random names,
       categories, prices and stock. About 5% of rows get a > 2 KB *incompressible* description
       (e.g. concatenated `md5()` values). Run:
       `docker compose exec -T postgres psql -U driftless -d shop -v rows=100000 -f /db/seed.sql`
+      (Git Bash: prefix `MSYS_NO_PATHCONV=1`). Deterministic via `setseed`; re-runnable (TRUNCATE first).
 - [ ] T02.3 `db/workload/`: pgbench scripts `update_price.sql` (price/stock only, description untouched),
       `update_desc.sql`, `insert.sql`, `delete.sql`. Run with weights at a fixed rate:
       `docker compose exec -T postgres pgbench -n -U driftless -c 4 -j 2 -R 200 -T 30 -D maxid=100000
@@ -151,6 +152,9 @@ events grouped by transaction, and acknowledges progress manually.
   Prime candidate for the first `docs/bugs/` note.
 - A published table without a primary key makes the *app's* UPDATE/DELETE fail.
 - DELETE carries only key columns. UPDATE may send unchanged TOASTed columns as an "unchanged" marker (see T04).
+- pgoutput also streams **TRUNCATE** (`db/seed.sql` truncates before seeding). Decide here: handle it
+  (clear the index) or publish only `insert, update, delete`. Excluding it means a re-seed leaves stale
+  documents, which reconcile will report as drift.
 - Ack transaction ends (commit LSN), not individual messages.
 - A slot nobody acks pins WAL forever; drop it when resetting (ROLLBACK.md).
 

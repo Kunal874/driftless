@@ -6,6 +6,7 @@ whenever a number or a correctness claim depends on it.
 
 Handy commands:
 - SQL: `docker compose exec -T postgres psql -U driftless -d shop -c "<sql>"`
+- From Git Bash, commands that pass container paths (`-f /db/...`) need `MSYS_NO_PATHCONV=1` in front
 - Meilisearch: `curl -s -H "Authorization: Bearer driftless-dev-master-key" http://127.0.0.1:7700/<path>`
 
 ## Global (every task)
