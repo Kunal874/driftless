@@ -113,7 +113,7 @@ driftless/
 │   ├── main.ts
 │   ├── source/  pipeline/  sinks/
 │   └── metrics.ts
-├── scripts/                📐 T05+: reconcile.ts, chaos.sh
+├── scripts/                workload.sh (T02: the one write workload); 📐 T05+: reconcile.ts, chaos.sh
 ├── docker/grafana/         📐 T09: dashboard provisioning
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md

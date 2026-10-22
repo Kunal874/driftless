@@ -102,11 +102,10 @@ later task has something to sync and something to stress it with.
       (e.g. concatenated `md5()` values). Run:
       `docker compose exec -T postgres psql -U driftless -d shop -v rows=100000 -f /db/seed.sql`
       (Git Bash: prefix `MSYS_NO_PATHCONV=1`). Deterministic via `setseed`; re-runnable (TRUNCATE first).
-- [ ] T02.3 `db/workload/`: pgbench scripts `update_price.sql` (price/stock only, description untouched),
-      `update_desc.sql`, `insert.sql`, `delete.sql`. Run with weights at a fixed rate:
-      `docker compose exec -T postgres pgbench -n -U driftless -c 4 -j 2 -R 200 -T 30 -D maxid=100000
-      -f /db/workload/update_price.sql@6 -f /db/workload/update_desc.sql@2
-      -f /db/workload/insert.sql@1 -f /db/workload/delete.sql@1 shop`
+- [x] T02.3 `db/workload/`: pgbench scripts `update_price.sql` (price/stock only, description untouched),
+      `update_desc.sql`, `insert.sql`, `delete.sql`, mixed 6/2/1/1. Run through the single runner
+      `scripts/workload.sh [RATE=200] [SECONDS=30] [CLIENTS=4]` (D-016). It reads `max(id)` itself and
+      calls pgbench inside the postgres container at a fixed rate.
 - [ ] T02.4 Verify (TEST_CHECKLIST → T02), `learn/task-02-source-data.md`, checkpoint
 
 **Dependencies:** none (SQL and pgbench ship inside the postgres image).

@@ -11,7 +11,10 @@ history lives in git.
     storage = EXTERNAL, verified); `db/` mounted read-only in the postgres container.
   - T02.2 done: `db/seed.sql` seeded 100,000 rows in ~1.9 s; 5,132 big descriptions; table 13 MB +
     TOAST 13 MB; two runs → identical checksum (deterministic).
-- Next step: **T02.3**: pgbench workload scripts + `scripts/workload.sh` (BUILD_PLAN.md → T02)
+  - T02.3 done: `db/workload/*.sql` + `scripts/workload.sh`. A 30 s run at 200 tx/s: 6,096 tx,
+    203 tps, 0 failed; mix 60.2/19.9/9.6/10.2 %; rows 100,000 + 587 − 622 = 99,965 ✓.
+- Next step: **T02.4**: run the T02 checklist (incl. the unchanged-TOAST decode check), write
+  `learn/task-02-source-data.md`, checkpoint
 
 ## Done in session 1
 
