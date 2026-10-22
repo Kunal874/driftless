@@ -8,6 +8,7 @@
 set -euo pipefail
 export MSYS_NO_PATHCONV=1 # Git Bash: don't rewrite container paths
 cd "$(dirname "$0")/.."
+docker compose build -q connector # the image must hold the code on disk (T10.2), not an older build
 
 pause_s=${1:-300}
 rate=${2:-200}

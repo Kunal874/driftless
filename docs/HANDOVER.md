@@ -6,13 +6,15 @@ Updated 2026-10-23, end of T09 (session 1). Overwrite this at every checkpoint: 
 ## Current state
 
 - Last checkpoint: **T09 — Observability & benchmarks** (tag `checkpoint/T09`)
-- In progress: nothing
-- Next step: **T10.1**: config file `driftless.config.json` (BUILD_PLAN.md → T10)
+- In progress: **T10**. T10.1 ✅ config file (`driftless.config.json`, `src/config-file.ts`, D-028). T10.2 ✅ `Dockerfile` +
+  `.dockerignore`; the compose `connector` is built from it (no repo mount any more: after code changes use
+  `docker compose up -d --build connector`; the test scripts run `docker compose build -q connector` themselves)
+- Next step: **T10.3**: README.md (numbers only from RESULTS.md)
 
 ## What the system holds right now
 
-- `products`: 274,776 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after the accidental
-  extra run noted in RESULTS §1).
+- `products`: 275,353 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after the T10.2 chaos
+  smoke run). The test index `products_t10` was deleted.
 - Slot `driftless_slot` caught up. Postgres runs with `max_slot_wal_keep_size=1GB`.
 - `connector`, `prometheus` and `grafana` are **stopped** (`docker compose stop`, containers kept). Start them with
   `docker compose --profile connector --profile metrics up -d`.

@@ -45,12 +45,11 @@ services:
       retries: 30
 
   connector:
-    # Driftless itself, for chaos tests and long runs. Starts only when asked for, so it never competes
-    # with `node src/main.ts` on the host for the replication slot:  docker compose up -d connector
+    # Driftless itself, built from the Dockerfile (T10.2). Starts only when asked for, so it never competes
+    # with `node src/main.ts` on the host for the replication slot:  docker compose up -d --build connector
+    # (--build after code changes; the test scripts build it themselves).
     profiles: ["connector"]
-    image: node:24.18.0-alpine
-    working_dir: /app
-    command: ["node", "src/main.ts"] # no build step: Node strips the TypeScript types itself
+    build: .
     environment:
       PGHOST: postgres
       PGPORT: "5432"
@@ -64,10 +63,6 @@ services:
       DRIFTLESS_METRICS_HOST: 0.0.0.0 # inside the container, so Prometheus can reach it; the host port below stays local
     ports:
       - "127.0.0.1:9464:9464" # GET /metrics (T09)
-    volumes:
-      # The repo, read-only. node_modules comes from the host: every runtime dependency is plain
-      # JavaScript, so a Windows install runs fine on Linux.
-      - ./:/app:ro
     depends_on:
       postgres:
         condition: service_healthy

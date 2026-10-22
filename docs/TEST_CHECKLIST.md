@@ -126,7 +126,9 @@ Handy commands:
 ## T10 — Config, packaging, release
 
 - [ ] Fresh clone → README quick start works end to end
-- [ ] `docker build` works; the image runs against the compose stack
-- [ ] A bad config gives a clear validation error
+- [x] `docker build` works; the image runs against the compose stack (244 MB, user `node`, no tests or dev
+      dependencies; re-backfilled 274,779 rows; `chaos.sh 60 10 200` → 6 kills, 0 drift)
+- [x] A bad config gives a clear validation error (one message, exit 2: several mistakes at once, a secret in the
+      file, bad JSON, missing file, wrong primary key, unknown table/column; a wrong key creates no index)
 - [ ] ARCHITECTURE.md and FLOW.md match the code; `learn/task-01` … `task-10` exist
 - [ ] Pushed with the owner's go-ahead; GitHub contributors show only the owner

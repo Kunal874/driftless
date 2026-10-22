@@ -328,9 +328,9 @@ First reproduce the naive race, then fix it (D-008).
 
 **Goal:** someone else can run Driftless from the README in minutes.
 
-- [ ] T10.1 Config file `driftless.config.json` (source connection, table → index, primary key, columns to
+- [x] T10.1 Config file `driftless.config.json` (source connection, table → index, primary key, columns to
       include/exclude), validated at start with clear errors; env vars override
-- [ ] T10.2 `Dockerfile` (node:24-alpine, `npm ci --omit=dev`, runs `node src/main.ts`, no build step) +
+- [x] T10.2 `Dockerfile` (node:24-alpine, `npm ci --omit=dev`, runs `node src/main.ts`, no build step) +
       `.dockerignore`; the compose `connector` service uses it
 - [ ] T10.3 README.md: what it is, how it works (diagram), quick start, tests, results (from RESULTS.md only),
       limitations

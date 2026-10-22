@@ -65,7 +65,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Backpressure | pause the replication socket at the pending cap, resume at half; 10 s status re-send (D-025) | `src/pipeline/backpressure.ts`, `src/main.ts` | T08 | ✅ |
 | WAL safety | slot WAL capped at 1 GB (compose); refuse to start on a lost slot (D-026) | `docker-compose.yml`, `src/source/replication.ts` | T08 | ✅ |
 | Metrics | `GET /metrics` (prom-client, port 9464): lag + write-time + batch-size histograms, changes by op, queue gauges read at scrape time, slot retained WAL; Prometheus + Grafana (profile `metrics`, dashboard provisioned) | `src/metrics.ts`, `docker/` | T09 | ✅ |
-| Config | tables → index mapping, validation | `src/config.ts` | T10 | 📐 |
+| Config | `driftless.config.json`: connection (no secrets), table → index, primary key, column include/exclude; validated in full at start (`parseConfig`), then checked against the real table before anything is created (`checkSync`); env vars override (D-028) | `src/config-file.ts`, `src/config.ts`, `src/source/replication.ts` | T10 | ✅ |
 
 File names are the plan, not a contract. If a task ends up splitting things differently,
 update this table.
@@ -110,7 +110,9 @@ driftless/
 ├── AGENTS.md               agent instructions + current status (read first)
 ├── CLAUDE.md               makes Claude Code load AGENTS.md
 ├── README.md               📐 T10: overview + quick start
-├── docker-compose.yml      local stack (connector service added in T05, Prometheus/Grafana in T09)
+├── driftless.config.json   what to sync where: connection (no secrets), table → index, columns (T10)
+├── Dockerfile              the connector image, no build step; .dockerignore is an allow-list (T10)
+├── docker-compose.yml      local stack (connector built from the Dockerfile; Prometheus/Grafana in T09)
 ├── package.json            scripts + dependencies (T03)
 ├── tsconfig.json           type-check only; Node 24 runs .ts files directly (T03)
 ├── .githooks/commit-msg    single-author guard (CONSTRAINTS rule 1)
@@ -120,7 +122,8 @@ driftless/
 │   └── workload/*.sql        pgbench scripts: random updates / inserts / deletes
 ├── src/                    the connector (tests sit next to code as *.test.ts)
 │   ├── main.ts               setup → stream → handle → confirm (T03)
-│   ├── config.ts             connection defaults, names, debug knob (T03)
+│   ├── config.ts             loads the config file + env vars: every setting is read here (T03, T10)
+│   ├── config-file.ts        validates the config file (T10)
 │   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07)
 │   ├── sinks/                document.ts, meilisearch.ts (T04)
 │   ├── pipeline/             lanes.ts, checkpointer.ts (T06), backpressure.ts (T08)

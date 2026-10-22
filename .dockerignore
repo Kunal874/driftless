@@ -1,0 +1,7 @@
+# Allow-list: only what the Dockerfile copies goes into the build context (no .git, docs, node_modules or .env).
+*
+!package.json
+!package-lock.json
+!driftless.config.json
+!src/
+src/**/*.test.ts

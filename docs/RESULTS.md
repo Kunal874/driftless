@@ -248,6 +248,17 @@ Lanes are more than a bigger batch: parallel requests overlap the HTTP, JSON and
 Meilisearch batch. **Decision (D-027):** keep 8 lanes by default, because a backlog (downtime, bulk load, backfill)
 is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearch.
 
+## 10. Config and packaging checks (T10)
+
+2026-10-23, on the 274,776-row table. Not benchmarks: correctness checks of the new config file and the image.
+
+| Check | Command | Result |
+|---|---|---|
+| Column exclusion, backfill path | host connector with a config: index `products_t10`, `columns.exclude: ["description"]` | 274,776 rows backfilled in 75.2 s |
+| Column exclusion, streaming path | then 272 updates (description + price), 289 description-only updates, 3 inserts | `reconcile.ts` with that config: 274,779 = 274,779, **0 / 0 / 0**; documents have no `description`; search for text only in descriptions: 0 hits; `--self-test` passed |
+| Image re-backfill | `DRIFTLESS_BACKFILL=1 docker compose up -d --build connector` (repairs the 564 changes the main index missed during the test, which reconcile had listed exactly) | 274,779 rows in 90.2 s → **0 / 0 / 0** |
+| Image under chaos | `scripts/chaos.sh 60 10 200` | 6 kills, 12,044 transactions (0 failed), 275,353 = 275,353, **0 / 0 / 0** |
+
 ---
 
 ## Resume claims: status
