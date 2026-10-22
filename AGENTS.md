@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T01 — Foundation** (tag `checkpoint/T01`) |
-| In progress | **T02**: source database & workload (see docs/HANDOVER.md for the exact step) |
+| Last checkpoint | **T02 — Source database & workload** (tag `checkpoint/T02`) |
+| Next step | **T03.1**: Node/TypeScript project setup (docs/BUILD_PLAN.md → T03) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

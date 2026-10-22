@@ -28,14 +28,19 @@ Handy commands:
 - [x] commit-msg hook rejects a `Co-Authored-By:` line (exit 1, no commit created)
 - [x] Every commit's author and committer is the owner
 
-## T02 — Source database & workload
+## T02 — Source database & workload ✅ (verified 2026-10-22)
 
-- [ ] Fresh volume (`docker compose down -v`, then `up -d --wait`) creates `products` automatically
-- [ ] Seed: `SELECT count(*) FROM products` equals the requested rows (default 100,000)
-- [ ] TOAST is really used: the table's TOAST relation is non-empty
+- [x] Fresh volume (`docker compose down -v`, then `up -d --wait`) creates `products` automatically
+      (log: `running /docker-entrypoint-initdb.d/01-schema.sql`; `description` storage = `e`, EXTERNAL)
+- [x] Seed: `SELECT count(*) FROM products` equals the requested rows: 100,000 in 1.9 s; two runs →
+      identical checksum
+- [x] TOAST is really used: 5,132 big descriptions, TOAST relation 13 MB
       (`SELECT pg_size_pretty(pg_relation_size(reltoastrelid)) FROM pg_class WHERE relname = 'products'`)
-- [ ] Workload at a fixed rate runs clean: pgbench `-R 200 -T 30` reports ≈200 tps and 0 failed transactions
-- [ ] The mix includes price-only updates (leave the big description untouched) and description updates
+- [x] Workload at a fixed rate runs clean: `scripts/workload.sh 200 30 4` → 6,096 tx, 203 tps, 0 failed
+- [x] The mix includes price-only updates (60.2%, big descriptions untouched), description rewrites
+      (19.9%), inserts (9.6%) and deletes (10.2%)
+- [x] A price-only UPDATE of a big row decodes as `description[text]:unchanged-toast-datum`, while a small
+      row's description is sent in full (temporary `test_decoding` slot; 0 slots left afterwards)
 
 ## T03 — Read the WAL
 

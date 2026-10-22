@@ -52,7 +52,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Component | Job | Planned location | Task | Status |
 |---|---|---|---|---|
 | Dev stack | Postgres (logical WAL) + Meilisearch, local only | `docker-compose.yml` | T01 | ✅ |
-| Demo source data | `products` schema, seed, random write workload | `db/` | T02 | 🔨 |
+| Demo source data | `products` schema, seed, random write workload | `db/`, `scripts/workload.sh` | T02 | ✅ |
 | Replication setup | create publication + slot if missing, check config | `src/source/replication.ts` | T03 | 📐 |
 | Stream + decoder | pgoutput messages → `ChangeEvent`s grouped per transaction | `src/source/decode.ts` | T03 | 📐 |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | 📐 |
@@ -105,7 +105,7 @@ driftless/
 ├── package.json            📐 T03: scripts + dependencies
 ├── tsconfig.json           📐 T03: type-check only (Node 24 runs .ts files directly)
 ├── .githooks/commit-msg    single-author guard (CONSTRAINTS rule 1)
-├── db/                     📐 T02: all SQL
+├── db/                     all SQL (T02)
 │   ├── init/01-schema.sql    runs automatically on a fresh Postgres volume
 │   ├── seed.sql              generates N demo rows
 │   └── workload/*.sql        pgbench scripts: random updates / inserts / deletes

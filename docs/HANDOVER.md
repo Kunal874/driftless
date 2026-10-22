@@ -1,51 +1,57 @@
 # Handover — where we left off
 
-Updated 2026-10-22, end of session 1. Overwrite this at every checkpoint: it describes *now*;
-history lives in git.
+Updated 2026-10-22, end of T02 (session 1). Overwrite this at every checkpoint: it describes
+*now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T01 — Foundation** (tag `checkpoint/T01`)
-- In progress: **T02**.
-  - T02.1 done: `products` table created by `db/init/01-schema.sql` on a fresh volume (`description`
-    storage = EXTERNAL, verified); `db/` mounted read-only in the postgres container.
-  - T02.2 done: `db/seed.sql` seeded 100,000 rows in ~1.9 s; 5,132 big descriptions; table 13 MB +
-    TOAST 13 MB; two runs → identical checksum (deterministic).
-  - T02.3 done: `db/workload/*.sql` + `scripts/workload.sh`. A 30 s run at 200 tx/s: 6,096 tx,
-    203 tps, 0 failed; mix 60.2/19.9/9.6/10.2 %; rows 100,000 + 587 − 622 = 99,965 ✓.
-- Next step: **T02.4**: run the T02 checklist (incl. the unchanged-TOAST decode check), write
-  `learn/task-02-source-data.md`, checkpoint
+- Last checkpoint: **T02 — Source database & workload** (tag `checkpoint/T02`)
+- In progress: nothing
+- Next step: **T03.1**: Node/TypeScript project (`package.json`, `tsconfig.json`), see BUILD_PLAN.md → T03
 
-## Done in session 1
+## What the database holds right now
 
-- Repo at `D:\PROJECTS\driftless`, branch `main`. LF line endings; single-author `commit-msg` hook,
-  tested (a `Co-Authored-By` line is rejected with exit 1 and no commit is created).
-- Local stack verified healthy: Postgres 17.11 with `wal_level=logical` on `127.0.0.1:5440`, and
-  Meilisearch 1.54.3 on `127.0.0.1:7700` (requests without the master key → 401).
-- Docs: ARCHITECTURE, FLOW, DECISIONS (D-001…D-015), CONSTRAINTS, TEST_CHECKLIST, ROLLBACK,
-  BUILD_PLAN, AGENTS.md / CLAUDE.md, `learn/task-01-foundation.md`.
+- `products`: 99,965 rows (seeded 100,000, then one 30 s workload run). Re-seed any time with
+  `db/seed.sql` and you get identical data.
+- No publications and no replication slots yet (T03 creates them). Meilisearch: no indexes.
 
-## Files changed
+## Done so far
 
-`.gitignore`, `.gitattributes`, `.githooks/commit-msg`, `docker-compose.yml`, `AGENTS.md`,
-`CLAUDE.md`, `docs/*.md`, `learn/task-01-foundation.md`
+- **T01 Foundation ✅**: repo, single-author hook, Docker stack, docs, build plan.
+- **T02 Source data ✅**: schema (`description` STORAGE EXTERNAL); deterministic seed (100k rows in
+  1.9 s, 5,132 big descriptions, identical checksum across runs); workload runner (200 tx/s, 0 failed,
+  60/20/10/10 mix); proof that a price-only update of a big row decodes as `unchanged-toast-datum`.
+
+## Notes for T03 (read before starting)
+
+- Decide how to handle **TRUNCATE** (BUILD_PLAN T03 pitfalls). `db/seed.sql` truncates before seeding.
+- The unchanged-TOAST marker is real and frequent: 60% of workload writes are price-only updates. The
+  decoder's test fixtures (T03.5) must include it.
+- To peek at decoded changes without code, use a temporary `test_decoding` slot (learn/task-02 §3).
+  Always check `pg_replication_slots` is clean afterwards.
+- Node connects from the host to `127.0.0.1:5440`, user/password `driftless`, database `shop`.
+
+## Files changed in T02
+
+`db/init/01-schema.sql`, `db/seed.sql`, `db/workload/*.sql`, `scripts/workload.sh`,
+`docker-compose.yml` (mounts), `docs/` (BUILD_PLAN, HANDOVER, ARCHITECTURE, CONSTRAINTS rule 13,
+DECISIONS D-016, TEST_CHECKLIST), `AGENTS.md` status, `learn/task-02-source-data.md`
 
 ## Environment (verified 2026-10-22)
 
 | Thing | Value |
 |---|---|
 | OS | Windows 11 |
-| Git | 2.55.0; global identity `Kunal <kunalchandrakar2005@gmail.com>` |
+| Git | 2.55.0 (installed in `C:\CODE\Git`); global identity `Kunal <kunalchandrakar2005@gmail.com>` |
 | Node / npm | 24.18.0 / 11.16.0 |
 | Docker | Engine 29.6.2, Desktop 4.83.0, Compose v5.3.1; engine sees 28 CPUs, ~7.6 GiB RAM |
 | Ports already taken | 5432 Windows Postgres · 5433 + 6379 online-judge-v2 · 5434 + 6380 reachinbox-scheduler (both auto-start with Docker) |
 
 ## Open issues / watch out
 
-- BUILD_PLAN.md approved by the owner on 2026-10-22, including every dependency it lists.
-- Docker Desktop was stopped at the start of session 1. Start it before `docker compose up -d --wait`.
-- Git Bash rewrites container paths: `docker compose exec … -f /db/seed.sql` fails unless prefixed with
-  `MSYS_NO_PATHCONV=1` (hit and confirmed in T02.2).
+- Git Bash rewrites container paths: `docker compose exec … -f /db/…` needs `MSYS_NO_PATHCONV=1`
+  (scripts set it themselves).
+- Docker Desktop may be stopped at session start. Start it before `docker compose up -d --wait`.
 - Init scripts in `db/init/` only run on an **empty** volume. Changing the schema later means
   `docker compose down -v` (wipes all data; ask first) or a manual migration.
 

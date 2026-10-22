@@ -57,7 +57,7 @@ atomicity inside the index. High availability (stretch S2).
 | Task | Name | Week | Status |
 |---|---|---|---|
 | T01 | Foundation: repo, safeguards, dev stack, docs, plan | 1 | ✅ |
-| T02 | Source database & write workload | 1 | 🔨 |
+| T02 | Source database & write workload | 1 | ✅ |
 | T03 | Read the WAL | 1–2 | ⬜ |
 | T04 | Meilisearch sink, ack after apply | 2 | ⬜ |
 | T05 | Correctness harness (reconcile + chaos) | 2–3 | ⬜ |
@@ -85,7 +85,7 @@ any session can resume from.
 
 ---
 
-## T02 — Source database & write workload 🔨
+## T02 — Source database & write workload ✅
 
 **Goal:** a realistic `products` table, seed data and a repeatable random-write workload, so every
 later task has something to sync and something to stress it with.
@@ -106,7 +106,7 @@ later task has something to sync and something to stress it with.
       `update_desc.sql`, `insert.sql`, `delete.sql`, mixed 6/2/1/1. Run through the single runner
       `scripts/workload.sh [RATE=200] [SECONDS=30] [CLIENTS=4]` (D-016). It reads `max(id)` itself and
       calls pgbench inside the postgres container at a fixed rate.
-- [ ] T02.4 Verify (TEST_CHECKLIST → T02), `learn/task-02-source-data.md`, checkpoint
+- [x] T02.4 Verify (TEST_CHECKLIST → T02), `learn/task-02-source-data.md`, checkpoint
 
 **Dependencies:** none (SQL and pgbench ship inside the postgres image).
 
