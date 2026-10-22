@@ -1,0 +1,44 @@
+# Local dev environment for Driftless. Every port binds to 127.0.0.1 only,
+# so nothing here is reachable from other machines on the network.
+# Credentials below are local-dev values, not secrets (see docs/CONSTRAINTS.md).
+name: driftless
+
+services:
+  postgres:
+    image: postgres:17.11
+    # wal_level=logical makes Postgres record enough detail in its WAL to stream
+    # row-level changes (logical decoding), which is how Driftless reads changes.
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_USER: driftless
+      POSTGRES_PASSWORD: driftless
+      POSTGRES_DB: shop
+    ports:
+      - "127.0.0.1:5440:5432" # host 5440: 5432-5434 are taken by other Postgres instances on this machine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U driftless -d shop"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.54.3
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: driftless-dev-master-key
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "127.0.0.1:7700:7700"
+    volumes:
+      - meilidata:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7700/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+  meilidata:
