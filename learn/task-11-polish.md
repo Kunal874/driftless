@@ -75,7 +75,12 @@ Two fixes:
 
 The main claim, "0 drift under crashes", is now re-proven automatically, not just once on one laptop. Locally, in its
 own compose project, the script took 145 s: backfill of 20,000 rows in 1.4 s, 24,060 transactions with 10 SIGKILLs,
-reconcile 20,116 = 20,116, 0 drift, self-test passed. (The first run on GitHub happens on the next push.)
+reconcile 20,116 = 20,116, 0 drift, self-test passed. The **first run on GitHub passed too**: 24,057 transactions,
+11 SIGKILLs, 20,239 = 20,239, 0 drift, 2 min 45 s for the e2e job.
+
+**One surprise on the first push:** pushing the `checkpoint/T11` tag started a *second*, identical run. A bare
+`on: push` fires for tag pushes too, and a checkpoint tag points at a commit CI has just tested. The fix is
+`push: branches: ['**']`: with only a branch filter, GitHub skips tag pushes.
 
 Design choices:
 - **The steps live in a script, not in YAML.** `scripts/ci-e2e.sh` runs locally too, so CI can be debugged without

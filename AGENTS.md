@@ -10,7 +10,7 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 | | |
 |---|---|
 | Last checkpoint | **T11 — Polish after release** (tag `checkpoint/T11`; release tag `v0.1.0` is T10) |
-| Next step | push T11 (owner's go-ahead) and check the first CI run; after that nothing is planned. New work starts with a plan the owner approves |
+| Next step | nothing planned: T11 is pushed and CI is green. New work starts with a plan the owner approves |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

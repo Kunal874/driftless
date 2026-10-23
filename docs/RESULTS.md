@@ -269,6 +269,7 @@ is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearc
 | The CI end-to-end script, locally | `COMPOSE_PROJECT_NAME=driftless-ci scripts/ci-e2e.sh 20000 120` (fresh stack) | backfill 20,000 rows in 1.4 s; 24,060 transactions, 10 SIGKILLs; 20,116 = 20,116, **0 / 0 / 0**; self-test passed; 145 s in total |
 | Its guard | `scripts/ci-e2e.sh` in the default project, outside CI | refused (exit 2), nothing touched |
 | Dashboard screenshot run | `scripts/chaos.sh 240 30 300` with Prometheus + Grafana up | 7 kills, 0 failed transactions (count not captured); 279,180 = 279,180, **0 / 0 / 0**; image: `docs/images/dashboard-chaos.png` |
+| **CI on GitHub**, first run | push of `6b67aaa` → Actions run 39935636390 (ubuntu-24.04) | unit 13 s; e2e 2 min 45 s: backfill 20,000 rows in 1.8 s; 24,057 transactions, **11 SIGKILLs**; 20,239 = 20,239, **0 / 0 / 0**; self-test passed |
 | BUG-001 contract | `npm test` (`ack-contract.test.ts`) | library 2.5.0 writes position + 1, as the compensation assumes |
 
 ---

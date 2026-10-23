@@ -8,8 +8,9 @@ describes *now*; history lives in git.
 - Last checkpoint: **T11 — Polish after release** (tag `checkpoint/T11`); release `v0.1.0` = T10
 - Published: **https://github.com/Kunal874/driftless** (public, MIT). `main` and all tags pushed; GitHub lists one
   contributor, `Kunal874`, with all commits.
-- **T11 is committed locally, not pushed.** Next step: push it (owner's go-ahead), then check that the first CI run on
-  GitHub passes (TEST_CHECKLIST → T11, last box). After that nothing is planned; new work needs a plan the owner approves.
+- **T11 is pushed and CI is green** on GitHub (run 39935636390: unit + e2e crash test, 0 drift). One follow-up commit
+  is local: this record, plus a CI trigger fix (tag pushes no longer re-run CI on an already-tested commit). Push it with
+  the owner's go-ahead. After that nothing is planned; new work needs a plan the owner approves.
 - The T10 fresh-clone folder and the T11 CI test project (`driftless-ci`) are both deleted.
 
 ## What the system holds right now
@@ -36,7 +37,7 @@ describes *now*; history lives in git.
   - BUG-001 had been fixed upstream in 2.6.0 (#222), so no report is needed. The dependency is pinned to exactly
     2.5.0, and a contract test guards the `+ 1` our code compensates for.
   - CI: typecheck + unit tests + `scripts/ci-e2e.sh` (fresh stack, SIGKILL chaos, reconcile 0) on every push. Passed
-    locally; the first GitHub run happens on the next push.
+    locally and on GitHub (first run: 11 SIGKILLs, 0 drift).
   - README: CI badge, a real Grafana screenshot from a chaos run, package metadata.
   - `npm test` 53/53.
 

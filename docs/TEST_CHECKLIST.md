@@ -141,5 +141,5 @@ Handy commands:
 - [x] Review fixes keep every invariant: `npm test` 53/53, `chaos.sh 60 10 200` → 0 drift after the `confirm()` change
 - [x] BUG-001 contract test passes on the pinned 2.5.0 (and would fail on 2.6.0's unchanged encoding)
 - [x] `scripts/ci-e2e.sh` passes locally in its own project (0 drift, self-test) and refuses the default project
-- [ ] The CI workflow passes on GitHub (first run happens on the next push, with the owner's go-ahead)
+- [x] The CI workflow passes on GitHub (first run 2026-10-23, run 39935636390: unit 13 s, e2e 2 min 45 s)
 - [x] README numbers and image come from recorded runs (RESULTS §11)

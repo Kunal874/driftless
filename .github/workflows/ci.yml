@@ -4,6 +4,7 @@ name: CI
 
 on:
   push:
+    branches: ['**'] # every branch, but not tag pushes: a checkpoint tag points at a commit CI already tested
   pull_request:
 
 permissions:
