@@ -333,6 +333,7 @@ changes and cross-table transactions (`BEGIN; UPDATE products …; UPDATE custom
 | Re-adding it | its index and `customer:*` keys deleted, full config back | publication re-added it; only customers backfilled (20,080 rows in 1.1 s); both tables × both sinks 0 drift |
 | Crashes with cross-table transactions | `WORKLOAD_MIX=multi scripts/chaos.sh 180 15 300` | 54,138 transactions, **11 SIGKILLs**; 289,886 products + 20,517 customers = documents = keys in both sinks, **0 / 0 / 0** |
 | The CI script, two tables | `COMPOSE_PROJECT_NAME=driftless-ci scripts/ci-e2e.sh 20000 120` (fresh stack, 20,000 products + 5,000 customers) | 23,901 multi transactions, 10 SIGKILLs; both tables × both sinks 0 drift; self-test caught planted drift in all 4 table × sink combinations |
+| **CI on GitHub**, two tables | push of `8e665ea` → Actions run 39947004991 | 23,868 multi transactions, **12 SIGKILLs**; 20,039 products + 5,192 customers = documents = keys, **0 / 0 / 0**; self-test passed |
 
 **Found while preparing the backfill race** (D-030): with `DRIFTLESS_BACKFILL=1` set, a connector killed between tables
 would have restarted the finished table on every restart: a livelock under repeated kills. Fixed before the race ran

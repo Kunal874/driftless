@@ -5,11 +5,11 @@ describes *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T13 — Multiple tables per instance** (tag `checkpoint/T13`); release `v0.1.0` = T10
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). T12 is pushed with CI green (run 39942643996).
-  **T13 is committed locally, not pushed.**
-- Next step: the owner's go-ahead to push T13 and release `v0.2.0` (version bump + tag, BUILD_PLAN T13.6). Nothing else
-  is planned; new work needs a plan the owner approves.
+- Last checkpoint: **T13 — Multiple tables per instance** (tag `checkpoint/T13`).
+- Released: **`v0.2.0`** (Redis cache + several tables; T12–T13). `v0.1.0` = T10.
+- Published: **https://github.com/Kunal874/driftless** (public, MIT). Everything is pushed; T13's CI run on GitHub
+  passed (run 39947004991: two tables, 12 SIGKILLs, 0 drift in every table and sink).
+- Next step: nothing planned. New work needs a plan the owner approves.
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
