@@ -67,8 +67,8 @@ atomicity inside the index. High availability (stretch S2).
 | T09 | Observability & benchmarks | 5–6 | ✅ |
 | T10 | Config, packaging, README, release | 6 | ✅ |
 | T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
-| T12 | Redis cache as a second sink (planned, awaiting approval) | 7 | ⬜ |
-| T13 | Multiple tables per instance (planned, awaiting approval) | 7–8 | ⬜ |
+| T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | 🔨 |
+| T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | ⬜ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -371,7 +371,7 @@ project better in every possible way"). Scope kept to what adds real value; the 
 
 ---
 
-## T12 — Redis cache as a second sink ⬜ (planned 2026-10-23, awaiting the owner's approval)
+## T12 — Redis cache as a second sink 🔨 (approved by the owner 2026-10-23, with Redis on by default)
 
 **Goal:** the same change stream also keeps a Redis cache exact: `product:{id}` always equals the row, never an older
 value. Proven the way the index is: reconcile, connector crashes, and a crash of Redis itself.
@@ -394,7 +394,7 @@ value. Proven the way the index is: reconcile, connector crashes, and a crash of
 - **Backfill:** starts by itself when *any* sink is empty and the table isn't (e.g. switching Redis on for existing
   rows). It rewrites both sinks, which is harmless.
 
-- [ ] T12.1 Dependencies (**need the owner's OK**): `@redis/client` 6.3.0 (MIT, no dependencies of its own,
+- [x] T12.1 Dependencies (**approved by the owner 2026-10-23**): `@redis/client` 6.3.0 (MIT, no dependencies of its own,
       published 2026-09-30) and the image `redis:8.10.1-alpine` (pushed 2026-09-21); both pass the 14-day rule.
       Compose service `redis` on `127.0.0.1:6381` (6379/6380 are taken), AOF `always`, its own volume. D-029.
 - [ ] T12.2 Sink contract, no behavior change: `type Sink = { name, applyBatch, clear, isEmpty }`; main applies every
@@ -418,7 +418,7 @@ which runs had Redis on.
 
 ---
 
-## T13 — Multiple tables per instance ⬜ (planned 2026-10-23, awaiting the owner's approval)
+## T13 — Multiple tables per instance ⬜ (approved by the owner 2026-10-23)
 
 **Goal:** one Driftless mirrors several tables, each into its own index and Redis prefix, with the same guarantees,
 including transactions that touch several tables at once.

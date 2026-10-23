@@ -34,6 +34,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@redis/client": "6.3.0",
     "meilisearch": "^0.62.0",
     "pg": "^8.23.1",
     "pg-logical-replication": "2.5.0",

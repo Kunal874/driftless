@@ -34,6 +34,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-026 | Cap slot WAL at 1 GB; refuse to start on a lost slot; recovery is manual | Accepted | T08 |
 | D-027 | Keep 8 lanes by default; 1 lane is the low-lag setting for Meilisearch | Accepted | T09 |
 | D-028 | Config file for what/where, env for secrets and tuning; check it before creating anything | Accepted | T10 |
+| D-029 | Redis as a second sink: hashes, both-or-nothing, durable acknowledgements, readers never write | Accepted | T12 |
 
 ---
 
@@ -353,3 +354,26 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   agree. Proven live: `description` excluded on a separate index → backfill 274,776 rows + streamed updates/inserts →
   reconcile 0 drift, no `description` field, no search hits on its text.
 - **Limits:** one table per Driftless; plain lower-case table names (no quoted identifiers).
+
+### D-029 — Redis as a second sink: hashes, both-or-nothing, durable acknowledgements, readers never write
+- **Decision:** the same change stream keeps a Redis cache next to the Meilisearch index. One hash per row,
+  `product:{id}`, one field per column with a JSON-encoded value (types survive). An update that omits unchanged TOAST
+  columns becomes `HSET` of only the sent fields, the same merge semantics as Meilisearch's `updateDocuments`; a delete
+  is `DEL`; the config's column filter applies. A lane batch counts as applied only when **both** sinks applied it (written
+  in parallel). Redis runs with AOF `appendfsync always`. Only Driftless writes the cache. Connection errors are retried
+  forever with backoff; command errors (`ErrorReply`, e.g. `WRONGTYPE`) fail-stop. TRUNCATE removes the key prefix
+  (`SCAN` + `UNLINK`) behind the same barrier as the index clear. A backfill starts by itself when any sink is empty.
+- **Why hashes, not one JSON string per row:** a string would need a read-modify-write to apply a partial update (the
+  WAL omits unchanged TOAST columns), which is slower and racy. `HSET` merges in one command.
+- **Why both-or-nothing:** confirming a transaction tells Postgres it may forget it. If Redis hadn't applied it yet, a
+  crash would leave the cache permanently behind. Ack-after-apply has to cover every sink (invariant 1).
+- **Why `appendfsync always`:** with the default `everysec`, Redis acknowledges writes that may still be only in
+  memory. A Redis crash can then lose the last second, and a key that was updated twice in that second goes back to an
+  older value: a *stale* cache, the one failure a cache must never have. `always` makes Redis reply only after the
+  write is on disk. The cost is measured in T12.5.
+- **Why readers never write:** in cache-aside, a reader that misses fills the cache from the database. A slow reader
+  can then put back a value that a concurrent writer has just replaced (the stale-set race). Here the cache is filled
+  only from the commit-ordered WAL, so a miss means "not cached yet", never "wrong".
+- **Consequences:** every write now waits for the slower of two systems (Meilisearch, in practice). Redis down = the
+  pipeline waits (backpressure), like Meilisearch down. Redis is optional: without a `redis` section in the config,
+  Driftless runs with Meilisearch only.

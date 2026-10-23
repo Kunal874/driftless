@@ -44,6 +44,23 @@ services:
       timeout: 3s
       retries: 30
 
+  redis:
+    image: redis:8.10.1-alpine
+    # The cache Driftless keeps in sync, next to the index (T12, D-029). AOF with appendfsync=always: Redis replies only
+    # once a write is on disk, so whatever Driftless counts as applied survives a Redis crash. The default (everysec)
+    # can lose the last second, which can roll a key back to an OLDER value: a stale cache (reproduced in T12.5).
+    # REDIS_APPENDFSYNC exists only for that experiment. RDB snapshots are off (--save ""): the AOF is the copy.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "${REDIS_APPENDFSYNC:-always}", "--save", ""]
+    ports:
+      - "127.0.0.1:6381:6379" # host 6381: 6379 and 6380 are taken by other projects' containers on this machine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   connector:
     # Driftless itself, built from the Dockerfile (T10.2). Starts only when asked for, so it never competes
     # with `node src/main.ts` on the host for the replication slot:  docker compose up -d --build connector
@@ -54,6 +71,7 @@ services:
       PGHOST: postgres
       PGPORT: "5432"
       MEILI_HOST: http://meilisearch:7700
+      REDIS_URL: redis://redis:6379
       DRIFTLESS_LANES: ${DRIFTLESS_LANES:-8} # override per run, e.g. DRIFTLESS_LANES=1 docker compose up -d connector
       DRIFTLESS_BATCH_MAX: ${DRIFTLESS_BATCH_MAX:-5000}
       DRIFTLESS_MAX_PENDING: ${DRIFTLESS_MAX_PENDING:-50000} # backpressure cap (T08)
@@ -67,6 +85,8 @@ services:
       postgres:
         condition: service_healthy
       meilisearch:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     # The supervisor half of fail-stop (D-009): whenever Driftless exits (crash, kill, fatal error),
     # Docker starts it again; it resumes from the slot's confirmed position.
@@ -100,3 +120,4 @@ services:
 volumes:
   pgdata:
   meilidata:
+  redisdata:
