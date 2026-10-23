@@ -1,6 +1,7 @@
 {
   "name": "driftless",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "description": "Keeps a Meilisearch index in sync with PostgreSQL by reading the WAL (logical replication).",
   "type": "module",

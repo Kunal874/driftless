@@ -224,3 +224,7 @@ and config validation. The claims are proven by scripts against the real stack:
 | [`db/`](db/) | schema, seed, workload SQL |
 | [`docs/`](docs/) | architecture, decisions, flows, results, bugs, rollback, build plan |
 | [`learn/`](learn/) | one plain-language write-up per build task: what was done, why, and what went wrong |
+
+## License
+
+[MIT](LICENSE)
