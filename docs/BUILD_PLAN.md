@@ -68,7 +68,7 @@ atomicity inside the index. High availability (stretch S2).
 | T10 | Config, packaging, README, release | 6 | ✅ |
 | T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
 | T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | ✅ |
-| T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | ⬜ |
+| T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | 🔨 |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -421,7 +421,7 @@ which runs had Redis on.
 
 ---
 
-## T13 — Multiple tables per instance ⬜ (approved by the owner 2026-10-23)
+## T13 — Multiple tables per instance 🔨 (approved by the owner 2026-10-23)
 
 **Goal:** one Driftless mirrors several tables, each into its own index and Redis prefix, with the same guarantees,
 including transactions that touch several tables at once.
@@ -444,7 +444,7 @@ including transactions that touch several tables at once.
 `multi` workload mix that includes transactions updating a product *and* a customer together. The standard
 products-only mix stays exactly as it is (D-016), so earlier numbers stay comparable.
 
-- [ ] T13.1 Schema, seed and the `multi` workload (`db/workload/customer_*.sql`, `cross_table.sql`; `workload.sh`
+- [x] T13.1 Schema, seed and the `multi` workload (`db/workload/customer_*.sql`, `cross_table.sql`; `workload.sh`
       picks the mix with `WORKLOAD_MIX=multi`; the default is unchanged)
 - [ ] T13.2 Config list + validation; publication kept equal to the config; unknown tables skipped; unit tests
 - [ ] T13.3 Routing, dispatch and sinks per mapping (index and key prefix per table); a cross-table transaction test
