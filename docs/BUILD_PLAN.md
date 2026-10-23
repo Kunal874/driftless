@@ -67,6 +67,8 @@ atomicity inside the index. High availability (stretch S2).
 | T09 | Observability & benchmarks | 5–6 | ✅ |
 | T10 | Config, packaging, README, release | 6 | ✅ |
 | T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
+| T12 | Redis cache as a second sink (planned, awaiting approval) | 7 | ⬜ |
+| T13 | Multiple tables per instance (planned, awaiting approval) | 7–8 | ⬜ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -369,9 +371,99 @@ project better in every possible way"). Scope kept to what adds real value; the 
 
 ---
 
+## T12 — Redis cache as a second sink ⬜ (planned 2026-10-23, awaiting the owner's approval)
+
+**Goal:** the same change stream also keeps a Redis cache exact: `product:{id}` always equals the row, never an older
+value. Proven the way the index is: reconcile, connector crashes, and a crash of Redis itself.
+
+**Design (recorded as D-029 when built):**
+- **Shape:** one Redis *hash* per row, `product:{id}`, one field per column, each value JSON-encoded so types survive.
+  An update that omits unchanged TOAST columns becomes `HSET` of only the sent fields: the same merge semantics as
+  Meilisearch's `updateDocuments`. A delete is `DEL`. The same column filter as the index applies.
+- **Both sinks or nothing:** a lane batch counts as applied, and its transactions can be confirmed, only after **both**
+  Meilisearch and Redis have applied it. They're written in parallel. Fail-stop plus idempotent replay already covers
+  either one failing.
+- **Durability:** Redis runs with AOF `appendfsync always`, so it acknowledges only what's on disk. With the default
+  `everysec`, a Redis crash loses up to a second of writes, which can *roll a key back to an older value*, i.e. a stale
+  cache. T12.5 reproduces that first (D-015), then proves `always` fixes it.
+- **Readers only read:** nothing but Driftless writes the cache (no cache-aside fill on a miss), so the classic "stale set
+  after invalidation" race can't happen. A miss means "not cached yet", never "wrong".
+- **Errors:** connection lost or refused → retry forever with backoff, like Meilisearch being unavailable (D-021). A
+  command error (e.g. `WRONGTYPE`) → fail-stop.
+- **TRUNCATE:** remove the key prefix (`SCAN` + `UNLINK`), as a barrier like the index clear.
+- **Backfill:** starts by itself when *any* sink is empty and the table isn't (e.g. switching Redis on for existing
+  rows). It rewrites both sinks, which is harmless.
+
+- [ ] T12.1 Dependencies (**need the owner's OK**): `@redis/client` 6.3.0 (MIT, no dependencies of its own,
+      published 2026-09-30) and the image `redis:8.10.1-alpine` (pushed 2026-09-21); both pass the 14-day rule.
+      Compose service `redis` on `127.0.0.1:6381` (6379/6380 are taken), AOF `always`, its own volume. D-029.
+- [ ] T12.2 Sink contract, no behavior change: `type Sink = { name, applyBatch, clear, isEmpty }`; main applies every
+      batch to every sink; `driftless_write_seconds{sink}`; chaos → 0 drift
+- [ ] T12.3 `src/sinks/redis.ts` + unit tests (fake client): coalesced batch → one pipeline (`HSET`/`DEL`), retry
+      policy, clear by prefix, `isEmpty`
+- [ ] T12.4 Config: optional `redis: { url, keyPrefix }` (omit it = Meilisearch only); `REDIS_URL`, `REDIS_PASSWORD`
+      (a secret: env only). Reconcile and its self-test cover Redis too
+- [ ] T12.5 Proofs → RESULTS §12: (a) backfill the existing rows into an empty Redis; (b) chaos with connector SIGKILLs
+      → 0 drift in both sinks; (c) reproduce the stale-key loss: `everysec` + Redis SIGKILL under load (bug note);
+      (d) `always` + the same test → 0 drift; (e) Redis paused 2 min under load → backpressure, 0 drift; (f) what
+      Redis adds to write time and lag at 1,000 tx/s
+- [ ] T12.6 CI e2e with Redis; dashboard panel per sink; README (diagram, config, results); `learn/task-12-redis.md`;
+      checkpoint
+
+**Dependencies:** `@redis/client`, image `redis:8.10.1-alpine` (T12.1).
+
+**Pitfalls:** check that `@redis/client`'s peer dependencies are optional before installing. Redis must never be
+reachable beyond 127.0.0.1 (it has no password in local dev). Keep the products-only benchmarks comparable by noting
+which runs had Redis on.
+
+---
+
+## T13 — Multiple tables per instance ⬜ (planned 2026-10-23, awaiting the owner's approval)
+
+**Goal:** one Driftless mirrors several tables, each into its own index and Redis prefix, with the same guarantees,
+including transactions that touch several tables at once.
+
+**Design (recorded as D-030 when built):**
+- **Config:** `sync` becomes a list of mappings `{ table, index, primaryKey, columns?, redisKeyPrefix? }`. A single
+  object is still accepted. Tables, index names and key prefixes must be unique.
+- **Publication = exactly the configured tables** (+ the watermark table); setup adds and removes tables. Changes still in
+  the WAL for a table that's no longer configured are skipped and logged, not fatal.
+- **Routing:** the lane key becomes `table:pk`, so per-row order still holds and equal ids in different tables don't
+  wait for each other. A transaction touching two tables is confirmed only when all of its changes, in every table and
+  sink, are applied. The checkpointer already counts per transaction, so this is a test, not new logic.
+- **TRUNCATE** of several tables in one statement: every mapped one is cleared behind one barrier.
+- **Backfill:** one table at a time. Progress is saved per table (`backfill:<table>`; the existing `backfill` row
+  becomes the products one), and marks carry the table name, so a mark can never be matched by the wrong table's
+  backfill.
+- **Reconcile, the startup check and metrics:** per table (a `table` label).
+
+**Demo data:** a second table `public.customers` (id, name, email, city, updated_at; 20,000 seeded rows), and a
+`multi` workload mix that includes transactions updating a product *and* a customer together. The standard
+products-only mix stays exactly as it is (D-016), so earlier numbers stay comparable.
+
+- [ ] T13.1 Schema, seed and the `multi` workload (`db/workload/customer_*.sql`, `cross_table.sql`; `workload.sh`
+      picks the mix with `WORKLOAD_MIX=multi`; the default is unchanged)
+- [ ] T13.2 Config list + validation; publication kept equal to the config; unknown tables skipped; unit tests
+- [ ] T13.3 Routing, dispatch and sinks per mapping (index and key prefix per table); a cross-table transaction test
+- [ ] T13.4 Backfill per table (saved progress, namespaced marks, migration of the old row); unit tests;
+      `backfill-race.sh` with two tables
+- [ ] T13.5 Reconcile per table; proofs → RESULTS §13: chaos with the `multi` mix → 0 drift in both tables × both sinks;
+      add a table to a running deployment's config → it backfills; remove one → its changes are ignored. CI e2e with
+      two tables
+- [ ] T13.6 Docs (README config and limitations, ARCHITECTURE, FLOW), `learn/task-13-multi-table.md`, checkpoint;
+      release `v0.2.0` (push and tag only with the owner's go-ahead)
+
+**Dependencies:** none new.
+
+**Pitfalls:** changing the backfill's saved-progress names must not restart a finished backfill or lose a running one
+(migrate the old row). Removing a table from the publication doesn't remove its older changes from the slot, so they
+must be skipped. Keep the existing single-table config files valid.
+
+---
+
 ## Stretch goals ✂ (only after T10, or if well ahead; cut first)
 
-- **S1 Redis cache sink:** write-through from the same stream, key `product:{id}`. Readers never write the
+- **S1 Redis cache sink** (→ planned as T12): write-through from the same stream, key `product:{id}`. Readers never write the
   cache, so the stale-set race can't happen.
 - **S2 Standby connector:** a second instance waits to take over the slot. Postgres allows one active
   consumer per slot, so the slot itself works as the lock.
