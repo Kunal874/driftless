@@ -170,10 +170,13 @@ async function confirmApplied(): Promise<void> {
   }
 }
 
-// Tells Postgres everything before `end` is applied, so it may recycle that WAL. Never moves backwards.
+// Tells Postgres everything before `end` is applied, so it may recycle that WAL. Never moves backwards, by
+// construction: the check and the update happen before any await (the library writes to the socket synchronously),
+// so two overlapping confirms can't reorder on the wire or in `confirmed` (T11.2).
 async function confirm(end: bigint): Promise<void> {
   if (end <= confirmed) return;
-  if (await sendStatus(end)) confirmed = end;
+  confirmed = end; // the caller guarantees everything before `end` is applied
+  await sendStatus(end);
 }
 
 // The library reports lsn + 1, but Postgres wants the END position itself (that's what its own subscriber

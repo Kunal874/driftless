@@ -60,7 +60,7 @@ export function createLanes({ count, batchMax, apply, onApplied, onError }: Opti
     idle(): Promise<void> {
       return isIdle() ? Promise.resolve() : new Promise((resolve) => idleWaiters.push(resolve));
     },
-    // ponytail: unbounded queues; T08 bounds them and pauses the stream when they fill up.
+    // The queues themselves have no limit: main.ts bounds them by pausing the stream at DRIFTLESS_MAX_PENDING (D-025).
     queued: (): number => lanes.reduce((total, lane) => total + lane.queue.length, 0),
   };
 }

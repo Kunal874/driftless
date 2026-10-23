@@ -355,7 +355,7 @@ proven automatically, and a README that shows rather than tells. Asked for by th
 project better in every possible way"). Scope kept to what adds real value; the stretch goals stay cut.
 
 - [x] T11.1 Delete the fresh-clone test folder `D:\PROJECTS\driftless-fresh` (owner asked)
-- [ ] T11.2 Fresh-eyes review of `src/` against the invariants; fix what's real, each fix with a test where it's
+- [x] T11.2 Fresh-eyes review of `src/` against the invariants; fix what's real, each fix with a test where it's
       logic (D-015: reproduce before fixing)
 - [ ] T11.3 CI (`.github/workflows/ci.yml`): typecheck + unit tests on every push, plus an end-to-end job on the real
       stack (seed → backfill → SIGKILL chaos → reconcile = 0 → reconcile self-test) via `scripts/ci-e2e.sh`, which
