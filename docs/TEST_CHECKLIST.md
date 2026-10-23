@@ -153,3 +153,13 @@ Handy commands:
 - [x] Redis frozen 2 min under load → connection survives, memory bounded, 0 drift
 - [x] Redis SIGKILL under load: `always` → 0 drift; the out-of-the-box setup's loss reproduced (RESULTS §12)
 - [x] The CI end-to-end script covers Redis (reconcile + self-test of both sinks)
+
+## T13 — Multiple tables per instance
+
+- [x] Config: a list (or one object), per-table index and key prefix; duplicates and overlapping prefixes refused
+- [x] Backward compatible: the new code with the old single-table config migrates the progress row, re-backfills
+      nothing, 0 drift
+- [x] Adding a table backfills just that table; both tables × both sinks reconcile to 0
+- [x] Removing a table drops it from the publication; its changes still in the WAL are skipped, not fatal; re-adding
+      it (after clearing its sinks) backfills just that table
+- [x] Backfill race with two tables, cross-table writes and 7 SIGKILLs: resumes, never restarts finished work, 0 drift

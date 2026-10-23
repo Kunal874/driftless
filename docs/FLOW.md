@@ -94,3 +94,19 @@ reproduced on purpose in T07.2: 42 documents wrong).
    **invalidates the slot** to protect its own disk.
 5. On start, Driftless sees `wal_status = 'lost'` and stops with recovery steps: drop and recreate
    the slot, then re-backfill. It never "just continues" (changes were lost).
+
+---
+
+## Flow 5 — One transaction across two tables, into two sinks · ✅ built in T12–T13 (D-029, D-030)
+
+1. The app runs `BEGIN; UPDATE products …; UPDATE customers …; COMMIT;` (`db/workload/cross_table.sql`).
+2. Both changes arrive in the stream as one transaction; the checkpointer tracks it with 2 changes to apply.
+3. The router keys lanes by `table:id`: the product change and the customer change usually land in different lanes and
+   are written in parallel.
+4. Each lane splits its batch by table: the product goes to the `products` index and the `product:` keys, the customer
+   to the `customers` index and the `customer:` keys. A batch counts as applied only when every sink of every table in
+   it has it.
+5. The transaction becomes confirmable only when both changes are applied, and everything before it is too. Then its
+   end LSN is confirmed. A crash at any point replays the whole transaction.
+   - *Can break:* routing by id alone (fine for order, but needless waits across tables); applying a batch's tables
+     to only one sink; a table removed from the config whose old changes still arrive (they're skipped, T13).

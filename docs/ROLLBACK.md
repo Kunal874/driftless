@@ -44,6 +44,10 @@ git log --oneline --grep "T04\."     # every commit of task T04
 - Reset only the search index or the cache: delete the index in Meilisearch, or the table's Redis keys
   (`product:*`, `customer:*`). On its next start, Driftless sees an empty sink for a non-empty table and backfills that
   table by itself (D-024, T12).
+- Re-add a table that was taken out of `sync` (T13): its index and keys missed every change made while it was out,
+  but they aren't empty, so no backfill would start. Delete its index and its Redis keys first
+  (`redis-cli --scan --pattern 'customer:*' | xargs redis-cli unlink`), then put it back in the config and start
+  Driftless: it re-adds the table to the publication and backfills just that table (tested: RESULTS §13).
 - Force a fresh backfill (e.g. after a mapping change): stop Driftless, then
   `DELETE FROM driftless_state WHERE name LIKE 'backfill%';` (or `name = 'backfill:public.products'` for one table),
   then start it with `DRIFTLESS_BACKFILL=1`. Without the DELETE, an interrupted backfill would *resume* instead of

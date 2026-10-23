@@ -318,6 +318,26 @@ for both sinks, and the connector does more work per batch. **Index size matters
 main stack's 284,640-document index gave lag p50 12.33 s, p99 29.49 s (Meilisearch write p50 5.74 s, p99 27.60 s;
 Redis write p50 0.08 s), the vocabulary-growth effect of §8.
 
+## 13. Several tables per instance (T13)
+
+2026-10-23. `products` (~290k rows) and `customers` (~20k rows), each with its own index and Redis key prefix. Reconcile
+compares every row of both tables with both sinks. The `multi` workload mix (`WORKLOAD_MIX=multi`) adds customer
+changes and cross-table transactions (`BEGIN; UPDATE products …; UPDATE customers …; COMMIT;`).
+
+| Check | Command | Result |
+|---|---|---|
+| New code, old single-table config | connector restarted, config unchanged | progress row `backfill` → `backfill:public.products`; publication unchanged; **nothing re-backfilled**; 287,491 rows = documents = keys, 0 drift |
+| Adding a table to a running deployment | config switched to two tables | publication **added** `customers`; only customers backfilled ("1 of 2 needed it"): 19,995 rows in 1.2 s; both tables × both sinks 0 drift |
+| Two-table backfill race | `WORKLOAD_MIX=multi scripts/backfill-race.sh 300 200 150 20` | both indexes and the cache emptied, backfill under 200 tx/s of multi writes with **7 SIGKILLs**: products **resumed 7 times** from its saved id, never restarted; then customers. 288,390 + 20,068 rows, both sinks, **0 / 0 / 0** |
+| Removing a table | stopped; 1,075 multi transactions written; restarted with a products-only config | publication **dropped** `customers`; its changes still in the WAL **skipped** (logged once), not fatal; products 288,409 = documents = keys, 0 drift |
+| Re-adding it | its index and `customer:*` keys deleted, full config back | publication re-added it; only customers backfilled (20,080 rows in 1.1 s); both tables × both sinks 0 drift |
+| Crashes with cross-table transactions | `WORKLOAD_MIX=multi scripts/chaos.sh 180 15 300` | 54,138 transactions, **11 SIGKILLs**; 289,886 products + 20,517 customers = documents = keys in both sinks, **0 / 0 / 0** |
+| The CI script, two tables | `COMPOSE_PROJECT_NAME=driftless-ci scripts/ci-e2e.sh 20000 120` (fresh stack, 20,000 products + 5,000 customers) | 23,901 multi transactions, 10 SIGKILLs; both tables × both sinks 0 drift; self-test caught planted drift in all 4 table × sink combinations |
+
+**Found while preparing the backfill race** (D-030): with `DRIFTLESS_BACKFILL=1` set, a connector killed between tables
+would have restarted the finished table on every restart: a livelock under repeated kills. Fixed before the race ran
+(resume beats request across tables; a requested round marks every table as due). The race above is the proof.
+
 ---
 
 ## Resume claims: status
@@ -328,4 +348,5 @@ Redis write p50 0.08 s), the vocabulary-growth effect of §8.
 | End-to-end lag p99 < [X] ms at [N] writes/s | **measured (§8, §9)**: p99 **< 4 s at 500 tx/s and < 5 s at 1,000 tx/s** (commit in Postgres → searchable in Meilisearch, 8 lanes); 3.8 s at 1,000 tx/s with 1 lane. Kept up with ~4,800 tx/s, the most this machine's Postgres could generate. Lag is bounded by Meilisearch's ~1 s per-batch indexing on a 150–190k-document index |
 | Lanes + batching raised throughput from [A] to [B] | **measured**: 9 → 6,752 transactions/s (backlog drain on a ~105k-document index, §4); the same command gives 2,810 tx/s on a 195k-document index (§4 note, §9) |
 | A cache that is never stale (T12) | **measured (§12)**: the Redis cache stays exact under connector SIGKILLs (11 kills, 0 drift over 282,154 rows) and under a **Redis SIGKILL** with `appendfsync always` (0 drift). With Redis's default persistence the same crash left **6,238 wrong keys** (4,143 rolled back to older values). Redis adds ~0.15 s of lag at 1,000 tx/s |
+| Several tables, cross-table transactions (T13) | **measured (§13)**: two tables (290k + 20k rows) × two sinks stay exact through 11 SIGKILLs with cross-table transactions, a backfill race with 7 SIGKILLs, and adding, removing and re-adding a table on a running deployment |
 | Debugging story | BUG-001 (library ack off-by-one); **BUG-002** (backfill race: 42 docs wrong → fixed with watermarks); **BUG-003** (the watermark algorithm assumed full row images; Postgres omits unchanged TOAST → 1 doc → 0) |
