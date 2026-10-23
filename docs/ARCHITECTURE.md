@@ -116,6 +116,7 @@ driftless/
 ├── package.json            scripts + dependencies (T03)
 ├── tsconfig.json           type-check only; Node 24 runs .ts files directly (T03)
 ├── .githooks/commit-msg    single-author guard (CONSTRAINTS rule 1)
+├── .github/workflows/ci.yml  every push: typecheck + unit tests, then scripts/ci-e2e.sh on a fresh stack (T11)
 ├── db/                     all SQL (T02)
 │   ├── init/01-schema.sql    runs automatically on a fresh Postgres volume
 │   ├── seed.sql              generates N demo rows
@@ -124,18 +125,20 @@ driftless/
 │   ├── main.ts               setup → stream → handle → confirm (T03)
 │   ├── config.ts             loads the config file + env vars: every setting is read here (T03, T10)
 │   ├── config-file.ts        validates the config file (T10)
-│   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07)
+│   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07); ack-contract.test.ts (T11)
 │   ├── sinks/                document.ts, meilisearch.ts (T04)
 │   ├── pipeline/             lanes.ts, checkpointer.ts (T06), backpressure.ts (T08)
 │   └── metrics.ts            Prometheus metrics + GET /metrics (T09)
 ├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05),
-│                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08), bench-lag.ts (T09)
+│                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08), bench-lag.ts (T09),
+│                           ci-e2e.sh (T11)
 ├── docker/                 prometheus/prometheus.yml, grafana/ provisioning + dashboard JSON (T09)
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md
 │   ├── DECISIONS.md   CONSTRAINTS.md  TEST_CHECKLIST.md  ROLLBACK.md
 │   ├── RESULTS.md          measured numbers with exact commands (since T05)
-│   └── bugs/               one BUG-NNN-<slug>.md per real bug found (BUG-001 since T03)
+│   ├── bugs/               one BUG-NNN-<slug>.md per real bug found (BUG-001 since T03)
+│   └── images/             the README's dashboard screenshot (T11)
 └── learn/                  plain-language explanation of every finished task
 ```
 

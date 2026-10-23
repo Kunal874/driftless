@@ -135,3 +135,11 @@ Handy commands:
       the never-built cache, Flow 2 status, the README marker)
 - [x] Pushed with the owner's go-ahead; GitHub contributors show only the owner (2026-10-23: public
       `Kunal874/driftless`, MIT; contributors API → only `Kunal874`, 53 / 53 commits linked to that account)
+
+## T11 — Polish after release
+
+- [x] Review fixes keep every invariant: `npm test` 53/53, `chaos.sh 60 10 200` → 0 drift after the `confirm()` change
+- [x] BUG-001 contract test passes on the pinned 2.5.0 (and would fail on 2.6.0's unchanged encoding)
+- [x] `scripts/ci-e2e.sh` passes locally in its own project (0 drift, self-test) and refuses the default project
+- [ ] The CI workflow passes on GitHub (first run happens on the next push, with the owner's go-ahead)
+- [x] README numbers and image come from recorded runs (RESULTS §11)

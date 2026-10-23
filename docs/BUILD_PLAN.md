@@ -66,7 +66,7 @@ atomicity inside the index. High availability (stretch S2).
 | T08 | Backpressure & WAL safety | 5 | ✅ |
 | T09 | Observability & benchmarks | 5–6 | ✅ |
 | T10 | Config, packaging, README, release | 6 | ✅ |
-| T11 | Polish after release (owner asked 2026-10-23) | 6 | 🔨 |
+| T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -348,7 +348,7 @@ First reproduce the naive race, then fix it (D-008).
 
 ---
 
-## T11 — Polish after release 🔨
+## T11 — Polish after release ✅
 
 **Goal:** make the published project stronger where it counts: correctness reviewed again with fresh eyes, every push
 proven automatically, and a README that shows rather than tells. Asked for by the owner on 2026-10-23 ("make the
@@ -363,7 +363,7 @@ project better in every possible way"). Scope kept to what adds real value; the 
 - [x] T11.4 README: CI badge, a Grafana screenshot from a real chaos run; `package.json` repository metadata
 - [x] T11.5 BUG-001 upstream: already fixed independently in 2.6.0 (#222), so no report is needed. Pinned to exactly
       2.5.0 and added a contract test that fails if the library's +1 changes
-- [ ] T11.6 Verify, `learn/task-11-polish.md`, checkpoint; push only with the owner's go-ahead
+- [x] T11.6 Verify, `learn/task-11-polish.md`, checkpoint; push only with the owner's go-ahead
 
 **Dependencies:** none new for the project. CI uses GitHub's own `actions/checkout@v4` and `actions/setup-node@v4`.
 

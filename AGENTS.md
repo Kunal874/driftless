@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T10 — Config, packaging, README, release** (tags `checkpoint/T10`, `v0.1.0`) |
-| Next step | none planned: all of BUILD_PLAN.md is done. New work starts with a plan the owner approves |
+| Last checkpoint | **T11 — Polish after release** (tag `checkpoint/T11`; release tag `v0.1.0` is T10) |
+| Next step | push T11 (owner's go-ahead) and check the first CI run; after that nothing is planned. New work starts with a plan the owner approves |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

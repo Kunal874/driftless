@@ -5,20 +5,19 @@ describes *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T10 — Config, packaging, README, release** (tags `checkpoint/T10`, `v0.1.0`)
+- Last checkpoint: **T11 — Polish after release** (tag `checkpoint/T11`); release `v0.1.0` = T10
 - Published: **https://github.com/Kunal874/driftless** (public, MIT). `main` and all tags pushed; GitHub lists one
   contributor, `Kunal874`, with all commits.
-- In progress: nothing. Next step: none planned. New work needs a plan the owner approves (BUILD_PLAN style).
-- Left for the owner: delete the folder `D:\PROJECTS\driftless-fresh` (the T10 fresh-clone test; its Docker project
-  is already removed, and a safety check stopped the agent from deleting the folder).
+- **T11 is committed locally, not pushed.** Next step: push it (owner's go-ahead), then check that the first CI run on
+  GitHub passes (TEST_CHECKLIST → T11, last box). After that nothing is planned; new work needs a plan the owner approves.
+- The T10 fresh-clone folder and the T11 CI test project (`driftless-ci`) are both deleted.
 
 ## What the system holds right now
 
-- `products`: 275,353 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after restarting the stack
-  following the fresh-clone test). The test index `products_t10` was deleted.
+- `products`: 279,180 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after the T11 screenshot
+  chaos run).
 - Slot `driftless_slot` caught up. Postgres runs with `max_slot_wal_keep_size=1GB`.
-- `postgres`, `meilisearch` and `connector` (the built image) are **running**; `prometheus` and `grafana` are stopped.
-  Start them with `docker compose --profile metrics up -d`.
+- Everything is **running**: `postgres`, `meilisearch`, `connector` (the built image), `prometheus`, `grafana`.
 
 ## Done
 
@@ -32,22 +31,29 @@ describes *now*; history lives in git.
   - Dockerfile (244 MB, non-root, no build step); the compose `connector` is built from it.
   - README; fresh-clone test passed; final docs pass.
   - MIT license; version 0.1.0; published.
-  - `npm test` 52/52.
+- **T11 ✅** (polish; owner asked "make it better in every possible way"):
+  - Fresh-eyes review: no bugs; `confirm()` now never moves backwards *by construction*.
+  - BUG-001 had been fixed upstream in 2.6.0 (#222), so no report is needed. The dependency is pinned to exactly
+    2.5.0, and a contract test guards the `+ 1` our code compensates for.
+  - CI: typecheck + unit tests + `scripts/ci-e2e.sh` (fresh stack, SIGKILL chaos, reconcile 0) on every push. Passed
+    locally; the first GitHub run happens on the next push.
+  - README: CI badge, a real Grafana screenshot from a chaos run, package metadata.
+  - `npm test` 53/53.
 
 ## Ideas, if the owner wants more (none started)
 
-- Report BUG-001 upstream to `kibae/pg-logical-replication` (outward-facing: the owner's call; repro + note ready).
 - A second sink (e.g. a Redis cache), the original stretch goal. D-027 says to re-check lanes then.
 - Multiple tables per instance; schema-change handling (`ALTER TABLE` is untested).
-- CI (GitHub Actions running `npm test` + typecheck). Note: the integration scripts need Docker and minutes per run.
+- Upgrade `pg-logical-replication` to ≥ 2.6.0 once it passes the 14-day rule (2026-10-28): change `sendStatus` to
+  pass `end` unchanged in the same commit; `ack-contract.test.ts` will demand it (BUG-001 → Upstream).
 
-## Files changed in T10
+## Files changed in T11
 
-`driftless.config.json`, `src/config-file.ts` (+ test), `src/config.ts`, `src/main.ts`, `src/sinks/document.ts`,
-`src/sinks/meilisearch.ts` (+ test), `src/source/replication.ts`, `scripts/reconcile.ts`, `Dockerfile`, `.dockerignore`,
-`docker-compose.yml`, `scripts/{chaos,backfill-race,bench-drain,slow-sink}.sh` (build first), `README.md`, `LICENSE`,
-`package.json` (0.1.0, MIT), `docs/` (DECISIONS D-028, RESULTS §10, ARCHITECTURE, FLOW, CONSTRAINTS, BUILD_PLAN,
-TEST_CHECKLIST), `AGENTS.md`, `learn/task-05` (pointer), `learn/task-10-release.md`
+`src/main.ts` (`confirm()`), `src/pipeline/lanes.ts` (comment), `src/source/ack-contract.test.ts` (new),
+`package.json` + `package-lock.json` (pg-logical-replication pinned to 2.5.0; repository metadata),
+`.github/workflows/ci.yml` (new), `scripts/ci-e2e.sh` (new), `README.md` (badge, screenshot, ci-e2e row),
+`docs/images/dashboard-chaos.png` (new), `docs/` (BUILD_PLAN T11, RESULTS §11, BUG-001 → Upstream, ARCHITECTURE,
+TEST_CHECKLIST), `AGENTS.md`, `learn/task-11-polish.md`
 
 ## Environment (verified 2026-10-23)
 
