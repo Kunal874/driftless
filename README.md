@@ -27,10 +27,11 @@ versions and machine (Windows 11, Docker Desktop, 28 CPUs / 7.6 GiB visible to D
 | **Backfill while the table is being written** | 0 drift in **10 / 10** races (≈105 race windows each), using DBLog-style watermarks. [§5](docs/RESULTS.md#5-backfill-under-load-t07) |
 | **Meilisearch down for 5 minutes** at 600 tx/s | memory stayed bounded (backpressure; uncapped it grew 45 → 220 MiB and kept rising), connection kept alive, 0 drift after. [§6](docs/RESULTS.md#6-slow-sink-meilisearch-frozen-under-load-t08) |
 | **Driftless down for too long** | Postgres gives up the slot at a 1 GB WAL cap instead of filling its disk; Driftless refuses to run on a lost slot and prints the recovery steps; recovery tested at 0 drift. [§7](docs/RESULTS.md#7-wal-safety-a-dead-driftless-cant-fill-the-disk-t08) |
+| **Redis cache, never stale** | 0 drift in the cache under connector SIGKILLs, a 2-minute Redis freeze, and a **SIGKILL of Redis itself**. With Redis's default persistence, the same crash left **6,238 wrong keys** (4,143 rolled back to older values), which is why Driftless runs it with `appendfsync always`. Cost: ~0.15 s of lag at 1,000 tx/s. [§12](docs/RESULTS.md#12-the-redis-cache-as-a-second-sink-t12) |
 
 **Every push re-proves the main claim.** CI type-checks, runs the unit tests, then starts the real stack on the
-runner: it seeds 20,000 rows, lets Driftless backfill them, SIGKILLs the connector about every 10 s under 200 tx/s of
-writes, and fails unless reconcile finds 0 drift ([`scripts/ci-e2e.sh`](scripts/ci-e2e.sh)).
+runner: it seeds 20,000 rows, lets Driftless backfill the index and the cache, SIGKILLs the connector about every 10 s
+under 200 tx/s of writes, and fails unless reconcile finds 0 drift in both ([`scripts/ci-e2e.sh`](scripts/ci-e2e.sh)).
 
 ![Grafana during a crash test](docs/images/dashboard-chaos.png)
 

@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T11 — Polish after release** (tag `checkpoint/T11`; release tag `v0.1.0` is T10) |
-| Next step | **T12.2**: sink contract (docs/BUILD_PLAN.md → T12); T13 after T12 |
+| Last checkpoint | **T12 — Redis cache as a second sink** (tag `checkpoint/T12`; release tag `v0.1.0` is T10) |
+| Next step | **T13.1**: second table + `multi` workload (docs/BUILD_PLAN.md → T13). T12 isn't pushed yet (owner's go-ahead) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

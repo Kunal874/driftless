@@ -143,3 +143,13 @@ Handy commands:
 - [x] `scripts/ci-e2e.sh` passes locally in its own project (0 drift, self-test) and refuses the default project
 - [x] The CI workflow passes on GitHub (first run 2026-10-23, run 39935636390: unit 13 s, e2e 2 min 45 s)
 - [x] README numbers and image come from recorded runs (RESULTS §11)
+
+## T12 — Redis cache as a second sink
+
+- [x] Unit tests for the Redis sink (encoding, merges, column filter, retry vs fail-stop, clear by prefix, isEmpty) and
+      the config's `redis` section (secrets refused, URL and prefix rules)
+- [x] Live: an empty Redis is backfilled by itself; reconcile compares both sinks; the self-test catches drift in each
+- [x] Connector crashes (chaos) → 0 drift in both sinks
+- [x] Redis frozen 2 min under load → connection survives, memory bounded, 0 drift
+- [x] Redis SIGKILL under load: `always` → 0 drift; the out-of-the-box setup's loss reproduced (RESULTS §12)
+- [x] The CI end-to-end script covers Redis (reconcile + self-test of both sinks)

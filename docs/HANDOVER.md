@@ -5,20 +5,19 @@ describes *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T11 — Polish after release** (tag `checkpoint/T11`); release `v0.1.0` = T10
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). `main` and all tags pushed; GitHub lists one
-  contributor, `Kunal874`, with all commits.
-- **T11 is pushed and CI is green** on GitHub (run 39935636390: unit + e2e crash test, 0 drift). One follow-up commit
-  is local: this record, plus a CI trigger fix (tag pushes no longer re-run CI on an already-tested commit). Push it with
-  the owner's go-ahead. After that nothing is planned; new work needs a plan the owner approves.
-- The T10 fresh-clone folder and the T11 CI test project (`driftless-ci`) are both deleted.
+- Last checkpoint: **T12 — Redis cache as a second sink** (tag `checkpoint/T12`); release `v0.1.0` = T10
+- Published: **https://github.com/Kunal874/driftless** (public, MIT). T11 is pushed with CI green. **T12 is committed
+  locally, not pushed** (push only with the owner's go-ahead).
+- Next step: **T13**: multiple tables per instance (BUILD_PLAN → T13, approved by the owner 2026-10-23).
+- Throwaway compose projects used in T12 (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
 
-- `products`: 279,180 rows; Meilisearch `products`: **identical** (last reconcile 0 / 0 / 0, after the T11 screenshot
-  chaos run).
+- `products`: 287,476 rows; Meilisearch `products` and Redis `product:*`: **identical** (last reconcile 0 / 0 / 0 in
+  both, after the T12.5 runs).
+- Redis 8.10.1 on 127.0.0.1:6381, AOF `appendfsync always`, volume `driftless_redisdata`.
 - Slot `driftless_slot` caught up. Postgres runs with `max_slot_wal_keep_size=1GB`.
-- Everything is **running**: `postgres`, `meilisearch`, `connector` (the built image), `prometheus`, `grafana`.
+- `postgres`, `meilisearch`, `redis` and `connector` are **running**; `prometheus` and `grafana` are stopped.
 
 ## Done
 
@@ -39,22 +38,32 @@ describes *now*; history lives in git.
   - CI: typecheck + unit tests + `scripts/ci-e2e.sh` (fresh stack, SIGKILL chaos, reconcile 0) on every push. Passed
     locally and on GitHub (first run: 11 SIGKILLs, 0 drift).
   - README: CI badge, a real Grafana screenshot from a chaos run, package metadata.
-  - `npm test` 53/53.
+- **T12 ✅** Redis cache as a second sink (D-029):
+  - `src/sinks/sink.ts` (contract), `src/sinks/redis.ts` (a hash per row, one MULTI per batch); every batch goes to every
+    sink and counts as applied only when all have it; a backfill starts when any sink is empty.
+  - Redis on by default (shipped config + compose), AOF `appendfsync always`; `@redis/client` 6.3.0.
+  - Reconcile and its self-test cover both sinks; CI therefore checks Redis on every push.
+  - Proofs (RESULTS §12): backfill of 279,652 rows; chaos and a 2-min Redis freeze at 0 drift; a Redis SIGKILL at
+    0 drift with `always`, against 6,238 wrong keys with Redis's default persistence; ~+0.15 s of lag.
+  - `npm test` 63/63.
 
 ## Ideas, if the owner wants more (none started)
 
-- A second sink (e.g. a Redis cache), the original stretch goal. D-027 says to re-check lanes then.
-- Multiple tables per instance; schema-change handling (`ALTER TABLE` is untested).
+- Schema-change handling (`ALTER TABLE` is untested). Multiple tables are planned as T13.
+- D-027 (lanes) was written for Meilisearch alone; with Redis (fast) beside it, Meilisearch still sets the pace, so it
+  stands. Re-measure if a faster search sink ever replaces it.
 - Upgrade `pg-logical-replication` to ≥ 2.6.0 once it passes the 14-day rule (2026-10-28): change `sendStatus` to
   pass `end` unchanged in the same commit; `ack-contract.test.ts` will demand it (BUG-001 → Upstream).
 
-## Files changed in T11
+## Files changed in T12
 
-`src/main.ts` (`confirm()`), `src/pipeline/lanes.ts` (comment), `src/source/ack-contract.test.ts` (new),
-`package.json` + `package-lock.json` (pg-logical-replication pinned to 2.5.0; repository metadata),
-`.github/workflows/ci.yml` (new), `scripts/ci-e2e.sh` (new), `README.md` (badge, screenshot, ci-e2e row),
-`docs/images/dashboard-chaos.png` (new), `docs/` (BUILD_PLAN T11, RESULTS §11, BUG-001 → Upstream, ARCHITECTURE,
-TEST_CHECKLIST), `AGENTS.md`, `learn/task-11-polish.md`
+`src/sinks/sink.ts` (new), `src/sinks/redis.ts` (+ test, new), `src/sinks/meilisearch.ts` (Sink, `isEmpty`),
+`src/main.ts` (all sinks, Redis client, backfill on any empty sink), `src/metrics.ts` (`sink` label), `src/config.ts` +
+`src/config-file.ts` (+ test) (`redis` section), `driftless.config.json` (Redis on), `scripts/reconcile.ts` (targets),
+`scripts/redis-crash.sh` (new), `scripts/slow-sink.sh` (service argument), `scripts/bench-lag.ts` (per-sink writes),
+`docker-compose.yml` (redis service), `docker/grafana/dashboards/driftless.json` (write panel per sink), `package.json`
+(@redis/client 6.3.0), `docs/` (DECISIONS D-029, RESULTS §12, ARCHITECTURE, BUILD_PLAN, TEST_CHECKLIST), `README.md`,
+`AGENTS.md`, `learn/task-12-redis.md`
 
 ## Environment (verified 2026-10-23)
 
@@ -65,7 +74,7 @@ TEST_CHECKLIST), `AGENTS.md`, `learn/task-11-polish.md`
 | Node / npm | 24.18.0 / 11.16.0 (connector container: `node:24.18.0-alpine`) |
 | Docker | Engine 29.6.2, Desktop 4.83.0, Compose v5.3.1; engine sees 28 CPUs, ~7.6 GiB RAM |
 | Ports already taken | 5432 Windows Postgres · 5433 + 6379 online-judge-v2 · 5434 + 6380 reachinbox-scheduler (both auto-start with Docker) |
-| Driftless ports | 5440 Postgres · 7700 Meilisearch · 9464 metrics · 9090 Prometheus · 3000 Grafana (all 127.0.0.1) |
+| Driftless ports | 5440 Postgres · 7700 Meilisearch · 6381 Redis · 9464 metrics · 9090 Prometheus · 3000 Grafana (all 127.0.0.1) |
 
 ## Open issues / watch out
 

@@ -35,7 +35,8 @@ rely on the checklists and on the owner reviewing changes.
 12. **README.md is written in T10**, not before.
 13. **Windows host.** LF line endings (forced by `.gitattributes`); shell scripts must work in Git
     Bash and inside Linux containers. Host ports: Postgres **5440** (5432 = local Windows
-    Postgres, 5433/5434 = other projects' containers), Meilisearch **7700**, metrics **9464** (connector),
+    Postgres, 5433/5434 = other projects' containers), Meilisearch **7700**, Redis **6381** (6379/6380 are taken),
+    metrics **9464** (connector),
     Prometheus **9090**, Grafana **3000**. In Git Bash, any
     `docker compose exec` that passes a container path (`/db/...`) needs `MSYS_NO_PATHCONV=1`,
     or Git Bash rewrites the path to a Windows one (`C:/CODE/Git/db/...`). Scripts set it themselves.

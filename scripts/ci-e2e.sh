@@ -22,7 +22,7 @@ echo "ci-e2e: stack up, ${rows} rows"
 docker compose up -d --wait
 docker compose exec -T postgres psql -q -U driftless -d shop -v rows="$rows" -f /db/seed.sql >/dev/null
 
-echo "ci-e2e: starting Driftless; the index is empty, so it backfills"
+echo "ci-e2e: starting Driftless; the index and the cache are empty, so it backfills"
 docker compose up -d --build --wait connector
 for _ in $(seq 1 180); do
   docker compose logs connector 2>&1 | grep -q 'backfill: done' && break

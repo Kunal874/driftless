@@ -67,7 +67,7 @@ atomicity inside the index. High availability (stretch S2).
 | T09 | Observability & benchmarks | 5–6 | ✅ |
 | T10 | Config, packaging, README, release | 6 | ✅ |
 | T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
-| T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | 🔨 |
+| T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | ✅ |
 | T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | ⬜ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
@@ -371,7 +371,7 @@ project better in every possible way"). Scope kept to what adds real value; the 
 
 ---
 
-## T12 — Redis cache as a second sink 🔨 (approved by the owner 2026-10-23, with Redis on by default)
+## T12 — Redis cache as a second sink ✅ (approved by the owner 2026-10-23, with Redis on by default)
 
 **Goal:** the same change stream also keeps a Redis cache exact: `product:{id}` always equals the row, never an older
 value. Proven the way the index is: reconcile, connector crashes, and a crash of Redis itself.
@@ -410,7 +410,7 @@ value. Proven the way the index is: reconcile, connector crashes, and a crash of
       It's recorded with D-029 rather than as a bug note, since it validates a design choice;
       (d) `always` + the same test → 0 drift; (e) Redis paused 2 min under load → backpressure, 0 drift; (f) what
       Redis adds to write time and lag at 1,000 tx/s
-- [ ] T12.6 CI e2e with Redis; dashboard panel per sink; README (diagram, config, results); `learn/task-12-redis.md`;
+- [x] T12.6 CI e2e with Redis; dashboard panel per sink; README (diagram, config, results); `learn/task-12-redis.md`;
       checkpoint
 
 **Dependencies:** `@redis/client`, image `redis:8.10.1-alpine` (T12.1).
