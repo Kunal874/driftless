@@ -8,6 +8,8 @@ import { transactionAssembler, type Transaction } from './source/decode.ts';
 import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
 import type { Sink } from './sinks/sink.ts';
+import { createClient } from '@redis/client';
+import { redisSink } from './sinks/redis.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
 import { createBackfill, readBackfillState } from './source/backfill.ts';
@@ -27,6 +29,14 @@ const meili = new Meilisearch(config.meilisearch);
 await ensureIndex(meili, config.index.uid, config.index.primaryKey);
 // Every batch goes to every sink; it counts as applied only once all of them have it (D-029).
 const sinks: Sink[] = [meilisearchSink(meili.index(config.index.uid), config.table, config.keepColumn)];
+if (config.redis) {
+  const redis = createClient({ url: config.redis.url, password: config.redis.password });
+  // The client reconnects by itself; without a listener an 'error' event would crash the process. Writes that fail
+  // meanwhile are retried by the sink (D-021), so here a lost connection is only worth a log line.
+  redis.on('error', (err: Error) => console.warn(`redis: ${err.message}`));
+  await redis.connect();
+  sinks.push(redisSink(redis, { table: config.table, keyPrefix: config.redis.keyPrefix, keep: config.keepColumn }));
+}
 
 const startLsn = await ensureReplicationSetup(db, config);
 await db.end();

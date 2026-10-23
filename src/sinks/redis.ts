@@ -11,7 +11,8 @@ import type { RowChange } from '../pipeline/lanes.ts';
 import { backoffMs, coalesce } from './meilisearch.ts';
 import type { Sink } from './sink.ts';
 
-export type RedisClient = ReturnType<typeof createClient>;
+// The client createClient() returns by default: node-redis 6 speaks RESP3 unless told otherwise.
+export type RedisClient = ReturnType<typeof createClient<{}, {}, {}, 3>>;
 
 // The Redis cache (T12, D-029): one hash per row, `${keyPrefix}${pk}`, one field per column, each value JSON-encoded
 // so types survive (`7` stays a number, `null` stays null). A batch is reduced per key first (the same `coalesce` as
@@ -95,4 +96,4 @@ function isTransient(err: unknown): boolean {
 }
 
 // SCAN MATCH treats * ? [ ] \ as glob syntax; a prefix must match literally.
-const escapeGlob = (prefix: string) => prefix.replace(/[*?[\]\\]/g, '\\$&');
+export const escapeGlob = (prefix: string) => prefix.replace(/[*?[\]\\]/g, '\\$&');

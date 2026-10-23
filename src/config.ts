@@ -49,6 +49,14 @@ export const meilisearch = {
   apiKey: process.env.MEILI_MASTER_KEY ?? 'driftless-dev-master-key',
 };
 
+// The Redis cache (T12, D-029): on when the file has a `redis` section. REDIS_URL overrides its URL (compose points the
+// connector at redis:6379); the password, if any, comes only from REDIS_PASSWORD.
+export const redis = file.redis && {
+  url: process.env.REDIS_URL ?? file.redis.url,
+  password: process.env.REDIS_PASSWORD || undefined,
+  keyPrefix: file.redis.keyPrefix,
+};
+
 export const publication = 'driftless_pub';
 export const slot = 'driftless_slot';
 

@@ -401,7 +401,7 @@ value. Proven the way the index is: reconcile, connector crashes, and a crash of
       batch to every sink; `driftless_write_seconds{sink}`; chaos → 0 drift
 - [x] T12.3 `src/sinks/redis.ts` + unit tests (fake client): coalesced batch → one pipeline (`HSET`/`DEL`), retry
       policy, clear by prefix, `isEmpty`
-- [ ] T12.4 Config: optional `redis: { url, keyPrefix }` (omit it = Meilisearch only); `REDIS_URL`, `REDIS_PASSWORD`
+- [x] T12.4 Config: optional `redis: { url, keyPrefix }` (omit it = Meilisearch only); `REDIS_URL`, `REDIS_PASSWORD`
       (a secret: env only). Reconcile and its self-test cover Redis too
 - [ ] T12.5 Proofs → RESULTS §12: (a) backfill the existing rows into an empty Redis; (b) chaos with connector SIGKILLs
       → 0 drift in both sinks; (c) reproduce the stale-key loss: `everysec` + Redis SIGKILL under load (bug note);

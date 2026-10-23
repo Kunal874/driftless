@@ -53,6 +53,28 @@ describe('parseConfig', () => {
   });
 });
 
+describe('parseConfig: the redis section (T12)', () => {
+  const withRedis = (redis: unknown) => ({ ...valid(), redis });
+
+  it('is optional, and accepted with a URL and a key prefix', () => {
+    expect(parseConfig(valid()).redis).toBeUndefined();
+    expect(parseConfig(withRedis({ url: 'redis://127.0.0.1:6381', keyPrefix: 'product:' })).redis)
+      .toEqual({ url: 'redis://127.0.0.1:6381', keyPrefix: 'product:' });
+  });
+
+  it('refuses a password, as a key or inside the URL, pointing to REDIS_PASSWORD', () => {
+    expect(() => parseConfig(withRedis({ url: 'redis://h:6379', keyPrefix: 'p:', password: 'x' })))
+      .toThrow(/redis\.password: secrets[\s\S]*REDIS_PASSWORD/);
+    expect(() => parseConfig(withRedis({ url: 'redis://:hunter2@h:6379', keyPrefix: 'p:' })))
+      .toThrow(/redis\.url .* without credentials \(set REDIS_PASSWORD/);
+  });
+
+  it('rejects a bad URL scheme and a key prefix with glob or space characters', () => {
+    expect(() => parseConfig(withRedis({ url: 'http://h:6379', keyPrefix: 'p:' }))).toThrow(/redis\.url/);
+    expect(() => parseConfig(withRedis({ url: 'redis://h:6379', keyPrefix: 'p *' }))).toThrow(/redis\.keyPrefix/);
+  });
+});
+
 describe('columnFilter', () => {
   it('keeps everything, an allow-list, or everything but a deny-list', () => {
     expect(['id', 'x'].filter(columnFilter(undefined))).toEqual(['id', 'x']);

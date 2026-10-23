@@ -6,13 +6,19 @@ export type FileConfig = {
   postgres: { host: string; port: number; user: string; database: string };
   meilisearch: { host: string };
   sync: { table: string; index: string; primaryKey: string; columns?: Columns };
+  redis?: { url: string; keyPrefix: string }; // the cache (T12); absent = Meilisearch only
 };
 
 type Obj = Record<string, unknown>;
 const isObj = (value: unknown): value is Obj => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 // Secrets go in environment variables, never in a file that might be committed.
-const SECRETS: Record<string, string> = { password: 'PGPASSWORD', apiKey: 'MEILI_MASTER_KEY', masterKey: 'MEILI_MASTER_KEY' };
+const SECRETS: Record<string, string> = {
+  'postgres.password': 'PGPASSWORD',
+  'meilisearch.apiKey': 'MEILI_MASTER_KEY',
+  'meilisearch.masterKey': 'MEILI_MASTER_KEY',
+  'redis.password': 'REDIS_PASSWORD',
+};
 
 export function parseConfig(raw: unknown): FileConfig {
   const problems: string[] = [];
@@ -24,8 +30,9 @@ export function parseConfig(raw: unknown): FileConfig {
     }
     for (const key of Object.keys(value)) {
       if (keys.includes(key)) continue;
-      problems.push(key in SECRETS
-        ? `${where}.${key}: secrets don't belong in the config file; set ${SECRETS[key]} instead`
+      const secret = SECRETS[`${where}.${key}`];
+      problems.push(secret
+        ? `${where}.${key}: secrets don't belong in the config file; set ${secret} instead`
         : `${where}.${key}: unknown setting (expected: ${keys.join(', ')})`);
     }
     return value;
@@ -37,7 +44,7 @@ export function parseConfig(raw: unknown): FileConfig {
     return value as string;
   };
 
-  const root = object(raw, 'config', ['postgres', 'meilisearch', 'sync']);
+  const root = object(raw, 'config', ['postgres', 'meilisearch', 'sync', 'redis']);
 
   const pg = object(root.postgres, 'postgres', ['host', 'port', 'user', 'database']);
   if (!Number.isInteger(pg.port) || (pg.port as number) < 1 || (pg.port as number) > 65535) {
@@ -75,8 +82,18 @@ export function parseConfig(raw: unknown): FileConfig {
     } else sync.columns = kinds[0] === 'include' ? { include: names } : { exclude: names };
   }
 
+  let redis: FileConfig['redis'];
+  if (root.redis !== undefined) {
+    const r = object(root.redis, 'redis', ['url', 'keyPrefix']);
+    redis = {
+      url: text(r, 'url', 'redis', /^rediss?:\/\/[^\s@]+$/,
+        'must be a redis:// or rediss:// URL without credentials (set REDIS_PASSWORD instead)'),
+      keyPrefix: text(r, 'keyPrefix', 'redis', /^[A-Za-z0-9_:.-]{1,64}$/, 'may only use letters, digits and _ : . -'),
+    };
+  }
+
   if (problems.length > 0) throw new Error(`invalid config:\n  - ${problems.join('\n  - ')}`);
-  return { postgres, meilisearch, sync };
+  return { postgres, meilisearch, sync, ...(redis && { redis }) };
 }
 
 // Which row columns become document fields.

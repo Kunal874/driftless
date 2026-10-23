@@ -5,5 +5,6 @@
     "table": "public.products",
     "index": "products",
     "primaryKey": "id"
-  }
+  },
+  "redis": { "url": "redis://127.0.0.1:6381", "keyPrefix": "product:" }
 }
