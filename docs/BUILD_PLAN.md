@@ -65,7 +65,7 @@ atomicity inside the index. High availability (stretch S2).
 | T07 | Backfill: naive → reproduce race → watermarks | 4 | ✅ |
 | T08 | Backpressure & WAL safety | 5 | ✅ |
 | T09 | Observability & benchmarks | 5–6 | ✅ |
-| T10 | Config, packaging, README, release | 6 | ⬜ |
+| T10 | Config, packaging, README, release | 6 | ✅ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -324,7 +324,7 @@ First reproduce the naive race, then fix it (D-008).
 
 ---
 
-## T10 — Config, packaging, README, release ⬜
+## T10 — Config, packaging, README, release ✅
 
 **Goal:** someone else can run Driftless from the README in minutes.
 
@@ -335,9 +335,9 @@ First reproduce the naive race, then fix it (D-008).
 - [x] T10.3 README.md: what it is, how it works (diagram), quick start, tests, results (from RESULTS.md only),
       limitations
 - [x] T10.4 Final docs pass: ARCHITECTURE and FLOW match the code; DECISIONS complete; learn/task-01…10 exist
-- [ ] T10.5 GitHub, **only after the owner's explicit go-ahead**: create the repo, push `main` + tags, check
+- [x] T10.5 GitHub, **only after the owner's explicit go-ahead**: create the repo, push `main` + tags, check
       the contributors list shows only the owner; tag `v0.1.0`
-- [ ] T10.6 Verify (TEST_CHECKLIST → T10), `learn/task-10-release.md`, checkpoint
+- [x] T10.6 Verify (TEST_CHECKLIST → T10), `learn/task-10-release.md`, checkpoint
 
 **Dependencies:** none new (JSON needs no parser).
 

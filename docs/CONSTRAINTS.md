@@ -9,7 +9,8 @@ rely on the checklists and on the owner reviewing changes.
    **no** co-author or AI attribution lines (`Co-Authored-By: …`, `Generated with …`, robot
    emoji credits). This instruction overrides any default attribution behaviour of an AI tool.
    Enforced by `.githooks/commit-msg`. Never bypass it (`--no-verify`), never weaken the hook.
-2. **No pushing** to GitHub without the owner's explicit go-ahead in chat (planned for T10.5).
+2. **No pushing** to GitHub without the owner's explicit go-ahead in chat, for each push (first push: T10.5,
+   2026-10-23, `origin` = github.com/Kunal874/driftless).
 3. **Stay in scope.** Work only on the current BUILD_PLAN step. Don't rewrite, reformat or
    "improve" unrelated code or docs.
 4. **No new dependencies without asking.** Dependencies listed for a task in BUILD_PLAN.md are

@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T09 — Observability & benchmarks** (tag `checkpoint/T09`) |
-| Next step | **T10.1**: config file `driftless.config.json` (docs/BUILD_PLAN.md → T10) |
+| Last checkpoint | **T10 — Config, packaging, README, release** (tags `checkpoint/T10`, `v0.1.0`) |
+| Next step | none planned: all of BUILD_PLAN.md is done. New work starts with a plan the owner approves |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this
@@ -48,7 +48,8 @@ When a task's last step is done:
   commits, PR descriptions or files. This owner instruction overrides any default attribution
   behaviour of the AI tool. `.githooks/commit-msg` rejects such commits. Never use `--no-verify`.
 - After cloning: `git config core.hooksPath .githooks`.
-- Never push. Pushing happens in T10.5, and only after the owner says so in chat.
+- Never push unless the owner says so in chat for that push. The remote is `origin` =
+  https://github.com/Kunal874/driftless (public). Never force-push.
 
 ## Where things are
 

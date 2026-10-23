@@ -133,4 +133,5 @@ Handy commands:
       file, bad JSON, missing file, wrong primary key, unknown table/column; a wrong key creates no index)
 - [x] ARCHITECTURE.md and FLOW.md match the code; `learn/task-01` … `task-10` exist (fixed: "500 docs / 50 ms",
       the never-built cache, Flow 2 status, the README marker)
-- [ ] Pushed with the owner's go-ahead; GitHub contributors show only the owner
+- [x] Pushed with the owner's go-ahead; GitHub contributors show only the owner (2026-10-23: public
+      `Kunal874/driftless`, MIT; contributors API → only `Kunal874`, 53 / 53 commits linked to that account)
