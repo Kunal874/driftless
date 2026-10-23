@@ -65,14 +65,14 @@
       "targets": [{ "refId": "A", "expr": "sum by (op) (rate(driftless_changes_applied_total[$__rate_interval]))", "legendFormat": "{{op}}" }]
     },
     {
-      "id": 7, "type": "timeseries", "title": "One Meilisearch write (until it succeeded)",
-      "description": "Most of the lag is this, about twice: a change waits for its lane's current write, then rides the next.",
+      "id": 7, "type": "timeseries", "title": "One write per sink (until applied)",
+      "description": "A batch is applied once its slowest sink is done. Most of the lag is that, about twice: a change waits for its lane's current write, then rides the next.",
       "gridPos": { "x": 0, "y": 12, "w": 8, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
       "targets": [
-        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le) (rate(driftless_write_seconds_bucket[$__rate_interval])))", "legendFormat": "p50" },
-        { "refId": "B", "expr": "histogram_quantile(0.99, sum by (le) (rate(driftless_write_seconds_bucket[$__rate_interval])))", "legendFormat": "p99" }
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le, sink) (rate(driftless_write_seconds_bucket[$__rate_interval])))", "legendFormat": "{{sink}} p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.99, sum by (le, sink) (rate(driftless_write_seconds_bucket[$__rate_interval])))", "legendFormat": "{{sink}} p99" }
       ]
     },
     {

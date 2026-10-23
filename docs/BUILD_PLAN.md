@@ -397,7 +397,7 @@ value. Proven the way the index is: reconcile, connector crashes, and a crash of
 - [x] T12.1 Dependencies (**approved by the owner 2026-10-23**): `@redis/client` 6.3.0 (MIT, no dependencies of its own,
       published 2026-09-30) and the image `redis:8.10.1-alpine` (pushed 2026-09-21); both pass the 14-day rule.
       Compose service `redis` on `127.0.0.1:6381` (6379/6380 are taken), AOF `always`, its own volume. D-029.
-- [ ] T12.2 Sink contract, no behavior change: `type Sink = { name, applyBatch, clear, isEmpty }`; main applies every
+- [x] T12.2 Sink contract, no behavior change: `type Sink = { name, applyBatch, clear, isEmpty }`; main applies every
       batch to every sink; `driftless_write_seconds{sink}`; chaos → 0 drift
 - [ ] T12.3 `src/sinks/redis.ts` + unit tests (fake client): coalesced batch → one pipeline (`HSET`/`DEL`), retry
       policy, clear by prefix, `isEmpty`

@@ -25,11 +25,13 @@ export const changesApplied = new Counter({
   registers: [registry],
 });
 
-// One lane write: from sending the batch until Meilisearch reports it `succeeded` (retries included). Most of the lag
-// is this, twice: a transaction usually waits for its lane's current write, then rides the next one.
+// One lane write to one sink (label `sink`): from sending the batch until that sink has applied it, retries included.
+// A batch is applied once its slowest sink is done. Most of the lag is that, twice: a transaction usually waits for
+// its lane's current write, then rides the next one.
 export const writeSeconds = new Histogram({
   name: 'driftless_write_seconds',
-  help: 'One lane write, until Meilisearch reports it succeeded',
+  help: 'One lane write to one sink, until that sink has applied it',
+  labelNames: ['sink'] as const,
   buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 10, 30, 60],
   registers: [registry],
 });

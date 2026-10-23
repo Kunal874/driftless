@@ -7,6 +7,7 @@ import { checkSync, ensureReplicationSetup } from './source/replication.ts';
 import { transactionAssembler, type Transaction } from './source/decode.ts';
 import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
+import type { Sink } from './sinks/sink.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
 import { createBackfill, readBackfillState } from './source/backfill.ts';
@@ -24,7 +25,8 @@ await checkSync(db, config.table, config.index.primaryKey, config.namedColumns).
 
 const meili = new Meilisearch(config.meilisearch);
 await ensureIndex(meili, config.index.uid, config.index.primaryKey);
-const sink = meilisearchSink(meili.index(config.index.uid), config.table, config.keepColumn);
+// Every batch goes to every sink; it counts as applied only once all of them have it (D-029).
+const sinks: Sink[] = [meilisearchSink(meili.index(config.index.uid), config.table, config.keepColumn)];
 
 const startLsn = await ensureReplicationSetup(db, config);
 await db.end();
@@ -40,9 +42,11 @@ const lanes = createLanes({
   count: config.lanes,
   batchMax: config.batchMax,
   apply: async (changes) => {
-    const written = writeSeconds.startTimer();
-    await sink.applyBatch(changes); // returns only once Meilisearch reports the writes `succeeded`
-    written();
+    await Promise.all(sinks.map(async (sink) => {
+      const written = writeSeconds.startTimer({ sink: sink.name });
+      await sink.applyBatch(changes); // resolves only once this sink has really applied the writes
+      written();
+    }));
     stats.changes += changes.length;
     stats.writes++;
     batchSize.observe(changes.length); // its count is the number of writes
@@ -143,7 +147,7 @@ async function dispatch(txn: Transaction): Promise<void> {
         // A barrier (D-018): everything before it is applied first, nothing after it starts before the clear.
         backfill.truncated();
         await lanes.idle();
-        await sink.clear();
+        await Promise.all(sinks.map((sink) => sink.clear()));
       }
       tracked.remaining--;
     } else if (change.table === config.watermarkTable) {
@@ -257,8 +261,14 @@ async function maybeBackfill(): Promise<void> {
     from = null; // asked for: DRIFTLESS_BACKFILL=1
   } else {
     const { rows: [{ has_rows }] } = await reader.query(`SELECT EXISTS (SELECT 1 FROM ${config.table}) AS has_rows`);
-    const empty = (await meili.index(config.index.uid).getStats()).numberOfDocuments === 0;
-    if (empty && has_rows) from = null; // an empty index for a table with rows: first start, or a deleted index
+    // Any empty sink for a table with rows: a first start, a deleted index, or a sink just switched on (e.g. Redis).
+    // The backfill rewrites every sink; for the ones already full that's a harmless repeat.
+    const emptiness = await Promise.all(sinks.map((sink) => sink.isEmpty()));
+    const empty = sinks.filter((_, i) => emptiness[i]).map((sink) => sink.name);
+    if (has_rows && empty.length > 0) {
+      from = null;
+      console.log(`backfill: empty sink(s): ${empty.join(', ')}`);
+    }
   }
   if (from === undefined) {
     await reader.end();

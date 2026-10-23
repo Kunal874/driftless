@@ -10,6 +10,7 @@ import {
 } from 'meilisearch';
 import type { RowChange } from '../pipeline/lanes.ts';
 import { toDocument, type Document } from './document.ts';
+import type { Sink } from './sink.ts';
 
 const TASK_WAIT_MS = 10 * 60_000; // a big task can take a while; the client's default is 5 s
 
@@ -57,8 +58,9 @@ export function coalesce(
 
 // Writes to the index. Each call returns only once Meilisearch has really applied the writes, so the
 // caller may count those changes as applied (ack after apply, invariant 1).
-export function meilisearchSink(index: Index, table: string, keep: (column: string) => boolean) {
+export function meilisearchSink(index: Index, table: string, keep: (column: string) => boolean): Sink {
   return {
+    name: 'meilisearch',
     async applyBatch(changes: RowChange[]): Promise<void> {
       const { upserts, deletes } = coalesce(changes, table, keep);
       const writes: Promise<void>[] = [];
@@ -73,6 +75,7 @@ export function meilisearchSink(index: Index, table: string, keep: (column: stri
       await Promise.all(writes); // different keys, so neither write can overtake the other in a harmful way
     },
     clear: (): Promise<void> => submit(() => index.deleteAllDocuments(), 'clear index (TRUNCATE)'),
+    isEmpty: async (): Promise<boolean> => (await index.getStats()).numberOfDocuments === 0,
   };
 }
 

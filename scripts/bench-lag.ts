@@ -28,13 +28,13 @@ async function scrape(): Promise<Snapshot> {
 
 const idle = (s: Snapshot) => s.get('driftless_txns_in_flight') === 0 && s.get('driftless_changes_waiting') === 0;
 
-// Buckets of one histogram as counts added between two snapshots, sorted by upper bound (le).
-function bucketDeltas(name: string, before: Snapshot, after: Snapshot): Array<{ le: number; n: number }> {
-  const prefix = `${name}_bucket{le="`;
+// Buckets of one histogram as counts added between two snapshots, sorted by upper bound (le). `label` narrows a
+// labelled histogram to one series, e.g. 'sink="redis"'.
+function bucketDeltas(name: string, before: Snapshot, after: Snapshot, label = ''): Array<{ le: number; n: number }> {
   return [...after.keys()]
-    .filter((k) => k.startsWith(prefix))
+    .filter((k) => k.startsWith(`${name}_bucket{`) && k.includes(label))
     .map((k) => {
-      const le = k.slice(prefix.length, -2);
+      const le = /le="([^"]+)"/.exec(k)![1]!;
       return { le: le === '+Inf' ? Infinity : Number(le), n: after.get(k)! - (before.get(k) ?? 0) };
     })
     .sort((a, b) => a.le - b.le);
@@ -100,7 +100,9 @@ while (!idle(after)) {
 const catchUpS = (Date.now() - stoppedAt) / 1000;
 
 const lag = bucketDeltas('driftless_lag_seconds', before, after);
-const write = bucketDeltas('driftless_write_seconds', before, after);
+const sinks = [...new Set([...after.keys()].flatMap((k) => /^driftless_write_seconds_bucket\{.*sink="([^"]+)"/.exec(k)?.[1] ?? []))];
+const writeBy = new Map(sinks.map((sink) => [sink, bucketDeltas('driftless_write_seconds', before, after, `sink="${sink}"`)]));
+const write = writeBy.get('meilisearch') ?? []; // the slower sink: the one that sets the pace (RESULTS §8, §12)
 const txns = lag.at(-1)?.n ?? 0;
 const writes = delta('driftless_batch_changes_count', before, after);
 const changes = delta('driftless_batch_changes_sum', before, after);
@@ -112,7 +114,9 @@ console.log(`pgbench: ${tps} tx/s achieved (schedule lag avg ${scheduleLag} ms)`
 console.log(`applied: ${txns} txns with changes, ${changes} changes in ${writes} writes (${(changes / writes).toFixed(1)}/write)`);
 console.log(`lag: p50 ${s2(quantile(0.5, lag))} s, p95 ${s2(quantile(0.95, lag))} s, p99 ${s2(quantile(0.99, lag))} s, ` +
   `max ≤ ${maxBound(lag)} s`);
-console.log(`one write: p50 ${s2(quantile(0.5, write))} s, p99 ${s2(quantile(0.99, write))} s`);
+for (const [sink, buckets] of writeBy) {
+  console.log(`one write to ${sink}: p50 ${s2(quantile(0.5, buckets))} s, p99 ${s2(quantile(0.99, buckets))} s`);
+}
 console.log(`during the run: max ${maxWaiting} changes waiting, max ${maxInFlight} txns in flight, reading paused in ` +
   `${pausedSamples} 1-s samples; caught up ${catchUpS.toFixed(1)} s after the load stopped`);
 console.log(`row: | ${rate} | ${tps} | ${env[0]} / ${env[1]} | ${s2(quantile(0.5, lag))} | ${s2(quantile(0.95, lag))} | ` +
