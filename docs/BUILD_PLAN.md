@@ -66,6 +66,7 @@ atomicity inside the index. High availability (stretch S2).
 | T08 | Backpressure & WAL safety | 5 | ✅ |
 | T09 | Observability & benchmarks | 5–6 | ✅ |
 | T10 | Config, packaging, README, release | 6 | ✅ |
+| T11 | Polish after release (owner asked 2026-10-23) | 6 | 🔨 |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -344,6 +345,26 @@ First reproduce the naive race, then fix it (D-008).
 **Pitfalls**
 - A fresh-clone test catches forgotten setup steps (for example `git config core.hooksPath .githooks`).
 - `.dockerignore` must exclude `node_modules`, `.git`, `docs`, `learn`.
+
+---
+
+## T11 — Polish after release 🔨
+
+**Goal:** make the published project stronger where it counts: correctness reviewed again with fresh eyes, every push
+proven automatically, and a README that shows rather than tells. Asked for by the owner on 2026-10-23 ("make the
+project better in every possible way"). Scope kept to what adds real value; the stretch goals stay cut.
+
+- [x] T11.1 Delete the fresh-clone test folder `D:\PROJECTS\driftless-fresh` (owner asked)
+- [ ] T11.2 Fresh-eyes review of `src/` against the invariants; fix what's real, each fix with a test where it's
+      logic (D-015: reproduce before fixing)
+- [ ] T11.3 CI (`.github/workflows/ci.yml`): typecheck + unit tests on every push, plus an end-to-end job on the real
+      stack (seed → backfill → SIGKILL chaos → reconcile = 0 → reconcile self-test) via `scripts/ci-e2e.sh`, which
+      also runs locally
+- [ ] T11.4 README: CI badge, a Grafana screenshot from a real chaos run; `package.json` repository metadata
+- [ ] T11.5 Draft the BUG-001 report for `kibae/pg-logical-replication`; filing it is the owner's call
+- [ ] T11.6 Verify, `learn/task-11-polish.md`, checkpoint; push only with the owner's go-ahead
+
+**Dependencies:** none new for the project. CI uses GitHub's own `actions/checkout@v4` and `actions/setup-node@v4`.
 
 ---
 
