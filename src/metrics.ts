@@ -20,8 +20,8 @@ export const lag = new Histogram({
 
 export const changesApplied = new Counter({
   name: 'driftless_changes_applied_total',
-  help: 'Row changes applied to Meilisearch, by operation',
-  labelNames: ['op'] as const,
+  help: 'Row changes applied to every sink, by operation and table',
+  labelNames: ['op', 'table'] as const,
   registers: [registry],
 });
 

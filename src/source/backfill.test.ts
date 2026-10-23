@@ -59,7 +59,8 @@ function setup(chunks: Row[][], onMark: (mark: string, bf: ReturnType<typeof cre
         return { rows: chunks.shift() ?? [] };
       }
       if (sql.startsWith('INSERT INTO "public"."driftless_state"')) {
-        saved.push({ ...JSON.parse(String(params[0])), pushedSoFar: pushed.length });
+        // params: [name, state]; each table's progress has its own row (T13)
+        saved.push({ name: params[0], ...JSON.parse(String(params[1])), pushedSoFar: pushed.length });
         return { rows: [] };
       }
       throw new Error(`unexpected query: ${sql}`);
@@ -133,6 +134,7 @@ describe('createBackfill (watermarks, D-023)', () => {
     const { bf, db, saved, selectedAfter } = setup([[row(5), row(6), row(7)], [row(8)]], (mark, b) => b.watermark(mark));
     await bf.run(db, '4'); // resuming: rows up to id 4 were done by an earlier, killed run
     expect(selectedAfter[0]).toBe('4');
+    expect(saved.every((s) => (s as { name: string }).name === 'backfill:public.products')).toBe(true); // per table (T13)
     expect(saved).toMatchObject([
       { status: 'running', after: '4', pushedSoFar: 0 }, // before anything new
       { status: 'running', after: '7', pushedSoFar: 3 }, // only once rows 5–7 were applied

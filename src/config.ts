@@ -54,22 +54,26 @@ export const meilisearch = {
 export const redis = file.redis && {
   url: process.env.REDIS_URL ?? file.redis.url,
   password: process.env.REDIS_PASSWORD || undefined,
-  keyPrefix: file.redis.keyPrefix,
 };
 
 export const publication = 'driftless_pub';
 export const slot = 'driftless_slot';
 
-// The table Driftless mirrors, the index it mirrors into, and which columns become document fields.
-export const table = file.sync.table;
-export const index = { uid: file.sync.index, primaryKey: file.sync.primaryKey };
-export const keepColumn = columnFilter(file.sync.columns);
-export const namedColumns = file.sync.columns ? Object.values(file.sync.columns)[0]! : []; // checked against the table
+// Every table Driftless mirrors (one or several, T13): its index, which columns become fields, its Redis key prefix.
+export const mappings = file.sync.map((m) => ({
+  table: m.table,
+  index: { uid: m.index, primaryKey: m.primaryKey },
+  keepColumn: columnFilter(m.columns),
+  namedColumns: m.columns ? Object.values(m.columns)[0]! : [], // checked against the table at start
+  redisKeyPrefix: m.redisKeyPrefix, // set when Redis is on
+}));
+export type MappingConfig = (typeof mappings)[number];
 
 // Driftless's own one-row table for backfill watermarks (T07, D-023). It's in the publication so the marks
 // travel through the WAL in commit order; Driftless creates it if it's missing.
 export const watermarkTable = 'public.driftless_watermark';
-export const tables = [table, watermarkTable]; // everything the publication must stream
+// Exactly what the publication streams: the mirrored tables plus the watermark table (T13: setup adds and removes).
+export const tables = [...mappings.map((m) => m.table), watermarkTable];
 // Driftless's own progress notes (backfill position). NOT published: its writes never echo back.
 export const stateTable = 'public.driftless_state';
 

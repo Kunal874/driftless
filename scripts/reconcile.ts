@@ -1,6 +1,6 @@
-// Proves (or disproves) "zero drift". Waits until Driftless has caught up, then compares every Postgres row with
-// its Meilisearch document AND, when the config has a Redis cache, its Redis hash (T12), using the same mapping the
-// sinks use (src/sinks/document.ts). Postgres is read once; every chunk is checked against every target.
+// Proves (or disproves) "zero drift". Waits until Driftless has caught up, then compares every row of every mirrored
+// table (T13) with its Meilisearch document AND, when the config has a Redis cache, its Redis hash (T12), using the same
+// mapping the sinks use (src/sinks/document.ts). Each table is read once; every chunk is checked against every target.
 // The connector must be running: its idle confirms are how "caught up" becomes visible.
 //
 // Usage: node scripts/reconcile.ts [--timeout=SECONDS] [--self-test]
@@ -16,8 +16,8 @@ import { lsnToBigInt } from '../src/source/lsn.ts';
 
 const CHUNK = 1000;
 const SAMPLES = 5;
-const pk = config.index.primaryKey;
 
+type Mapping = config.MappingConfig;
 type Report = {
   rows: number;
   documents: number;
@@ -26,7 +26,7 @@ type Report = {
   mismatched: { id: string; expected: string; actual: string }[];
 };
 
-// Something reconcile compares with Postgres: the index, or the Redis cache.
+// Something reconcile compares with one table: its index, or its part of the Redis cache.
 type Target = {
   name: string;
   unit: string; // what it holds per row: documents, keys
@@ -47,7 +47,7 @@ async function write(task: ReturnType<Index['updateDocuments']>): Promise<void> 
   if (done.status !== 'succeeded') throw new Error(`self-test write ${done.status}: ${done.error?.message}`);
 }
 
-function meilisearchTarget(index: Index): Target {
+function meilisearchTarget(index: Index, pk: string): Target {
   return {
     name: 'meilisearch',
     unit: 'documents',
@@ -70,7 +70,7 @@ function meilisearchTarget(index: Index): Target {
   };
 }
 
-function redisTarget(client: RedisClient, prefix: string): Target {
+function redisTarget(client: RedisClient, prefix: string, pk: string): Target {
   const key = (id: string) => prefix + id;
   const decode = (hash: Record<string, string>): Document =>
     Object.fromEntries(Object.entries(hash).map(([field, value]) => [field, JSON.parse(value)]));
@@ -127,9 +127,10 @@ async function waitForCatchUp(db: pg.Client, meili: Meilisearch, timeoutMs: numb
   }
 }
 
-async function compare(db: pg.Client, targets: Target[]): Promise<Map<Target, Report>> {
+async function compare(db: pg.Client, mapping: Mapping, targets: Target[]): Promise<Map<Target, Report>> {
   const reports = new Map(targets.map((t): [Target, Report] => [t, { rows: 0, documents: 0, missing: [], extra: [], mismatched: [] }]));
-  const table = config.table.split('.').map((part) => db.escapeIdentifier(part)).join('.');
+  const pk = mapping.index.primaryKey;
+  const table = mapping.table.split('.').map((part) => db.escapeIdentifier(part)).join('.');
   const pkColumn = db.escapeIdentifier(pk);
   const ids = new Set<string>(); // ponytail: every id in memory (~50 MB per million rows); fine for a checker
   let last: string | null = null;
@@ -151,7 +152,7 @@ async function compare(db: pg.Client, targets: Target[]): Promise<Map<Target, Re
           report.missing.push(id);
           continue;
         }
-        const expected = canonical(toDocument(row, config.keepColumn));
+        const expected = canonical(toDocument(row, mapping.keepColumn));
         const actual = canonical(doc);
         if (expected !== actual) report.mismatched.push({ id, expected, actual });
       }
@@ -172,10 +173,10 @@ async function compare(db: pg.Client, targets: Target[]): Promise<Map<Target, Re
 const drift = (r: Report) => r.missing.length + r.extra.length + r.mismatched.length;
 const totalDrift = (reports: Map<Target, Report>) => [...reports.values()].reduce((sum, r) => sum + drift(r), 0);
 
-function print(reports: Map<Target, Report>, ms: number): void {
+function print(table: string, reports: Map<Target, Report>): void {
   const sample = (ids: string[]) => (ids.length ? ` (e.g. ${ids.slice(0, SAMPLES).join(', ')})` : '');
   for (const [target, r] of reports) {
-    console.log(`reconcile: ${r.rows} rows vs ${r.documents} ${target.unit} in ${target.name}`);
+    console.log(`reconcile: ${table}: ${r.rows} rows vs ${r.documents} ${target.unit} in ${target.name}`);
     console.log(`  missing ${target.unit}:    ${r.missing.length}${sample(r.missing)}`);
     console.log(`  extra ${target.unit}:      ${r.extra.length}${sample(r.extra)}`);
     console.log(`  mismatched ${target.unit}: ${r.mismatched.length}${sample(r.mismatched.map((m) => m.id))}`);
@@ -184,38 +185,35 @@ function print(reports: Map<Target, Report>, ms: number): void {
       console.log(`    #${m.id} actual   ${m.actual.slice(0, 200)}`);
     }
   }
-  console.log(`reconcile: compared in ${ms} ms`);
-  const total = totalDrift(reports);
-  console.log(total === 0 ? 'OK: no drift' : `DRIFT: ${total} document(s)/key(s) differ from Postgres`);
 }
 
 // A checker that can't see drift is worse than none. In every target, plant one corrupted, one missing and one extra
 // entry, demand that compare() finds exactly those, then put everything back and demand 0 again.
-async function selfTest(db: pg.Client, targets: Target[]): Promise<boolean> {
-  if (totalDrift(await compare(db, targets)) !== 0) throw new Error('every target must be in sync before the self-test');
-  const { rows: [a, b] } = await db.query(`SELECT * FROM ${config.table} ORDER BY ${db.escapeIdentifier(pk)} LIMIT 2`);
+async function selfTest(db: pg.Client, mapping: Mapping, targets: Target[]): Promise<boolean> {
+  if (totalDrift(await compare(db, mapping, targets)) !== 0) throw new Error(`${mapping.table} must be in sync before the self-test`);
+  const pk = mapping.index.primaryKey;
+  const { rows: [a, b] } = await db.query(`SELECT * FROM ${mapping.table} ORDER BY ${db.escapeIdentifier(pk)} LIMIT 2`);
   const [idA, idB] = [String(a[pk]), String(b[pk])];
   for (const target of targets) {
     await target.corrupt(idA);
     await target.remove([idB]);
     await target.replace([{ [pk]: 'selftest-extra', name: 'not in Postgres' }]);
   }
-  const planted = await compare(db, targets);
+  const planted = await compare(db, mapping, targets);
   const found = (got: string[], want: string) => got.length === 1 && got[0] === want;
   let caught = true;
   for (const [target, r] of planted) {
     const ok = found(r.mismatched.map((m) => m.id), idA) && found(r.missing, idB) && found(r.extra, 'selftest-extra');
     caught &&= ok;
-    console.log(`self-test (${target.name}): planted mismatch #${idA}, missing #${idB}, extra #selftest-extra → found ` +
-      `${r.mismatched.length} mismatched, ${r.missing.length} missing, ${r.extra.length} extra`);
+    console.log(`self-test (${mapping.table}, ${target.name}): planted mismatch #${idA}, missing #${idB}, extra ` +
+      `#selftest-extra → found ${r.mismatched.length} mismatched, ${r.missing.length} missing, ${r.extra.length} extra`);
   }
   for (const target of targets) {
-    await target.replace([toDocument(a, config.keepColumn), toDocument(b, config.keepColumn)]); // the true rows
+    await target.replace([toDocument(a, mapping.keepColumn), toDocument(b, mapping.keepColumn)]); // the true rows
     await target.remove(['selftest-extra']);
   }
-  const restored = totalDrift(await compare(db, targets)) === 0;
-  console.log(`self-test: after restoring, drift = ${restored ? 0 : 'NOT 0'}`);
-  console.log(caught && restored ? 'self-test PASSED' : 'self-test FAILED');
+  const restored = totalDrift(await compare(db, mapping, targets)) === 0;
+  console.log(`self-test (${mapping.table}): after restoring, drift = ${restored ? 0 : 'NOT 0'}`);
   return caught && restored;
 }
 
@@ -225,19 +223,30 @@ const db = new pg.Client(config.pgConfig);
 const meili = new Meilisearch(config.meilisearch);
 const redis = config.redis ? createClient({ url: config.redis.url, password: config.redis.password }) : undefined;
 redis?.on('error', () => {}); // a failed command rejects anyway; reconcile then exits with 2
+const targetsFor = (m: Mapping) => [
+  meilisearchTarget(meili.index(m.index.uid), m.index.primaryKey),
+  ...(redis && m.redisKeyPrefix ? [redisTarget(redis, m.redisKeyPrefix, m.index.primaryKey)] : []),
+];
 try {
   await db.connect();
   await redis?.connect();
-  const targets = [meilisearchTarget(meili.index(config.index.uid))];
-  if (redis && config.redis) targets.push(redisTarget(redis, config.redis.keyPrefix));
   console.log(`reconcile: caught up after waiting ${await waitForCatchUp(db, meili, timeoutS * 1000)} ms`);
   if (args.includes('--self-test')) {
-    process.exitCode = (await selfTest(db, targets)) ? 0 : 1;
+    let passed = true;
+    for (const m of config.mappings) passed = (await selfTest(db, m, targetsFor(m))) && passed;
+    console.log(passed ? 'self-test PASSED' : 'self-test FAILED');
+    process.exitCode = passed ? 0 : 1;
   } else {
     const started = Date.now();
-    const reports = await compare(db, targets);
-    print(reports, Date.now() - started);
-    process.exitCode = totalDrift(reports) === 0 ? 0 : 1;
+    let total = 0;
+    for (const m of config.mappings) {
+      const reports = await compare(db, m, targetsFor(m));
+      print(m.table, reports);
+      total += totalDrift(reports);
+    }
+    console.log(`reconcile: compared in ${Date.now() - started} ms`);
+    console.log(total === 0 ? 'OK: no drift' : `DRIFT: ${total} document(s)/key(s) differ from Postgres`);
+    process.exitCode = total === 0 ? 0 : 1;
   }
 } catch (err) {
   console.error(`reconcile: could not check: ${err instanceof Error ? err.message : String(err)}`);

@@ -41,11 +41,13 @@ git log --oneline --grep "T04\."     # every commit of task T04
   slot. Ask first.
 - Full fresh start: `docker compose down -v && docker compose up -d --wait`
   (from T02, Postgres re-runs `db/init/*.sql` on the empty volume).
-- Reset only the search index: delete the `products` index in Meilisearch. On its next start, Driftless sees
-  an empty index for a non-empty table and backfills it by itself (D-024).
+- Reset only the search index or the cache: delete the index in Meilisearch, or the table's Redis keys
+  (`product:*`, `customer:*`). On its next start, Driftless sees an empty sink for a non-empty table and backfills that
+  table by itself (D-024, T12).
 - Force a fresh backfill (e.g. after a mapping change): stop Driftless, then
-  `DELETE FROM driftless_state WHERE name = 'backfill';`, then start it with `DRIFTLESS_BACKFILL=1`. Without
-  the DELETE, an interrupted backfill would *resume* instead of starting over.
+  `DELETE FROM driftless_state WHERE name LIKE 'backfill%';` (or `name = 'backfill:public.products'` for one table),
+  then start it with `DRIFTLESS_BACKFILL=1`. Without the DELETE, an interrupted backfill would *resume* instead of
+  starting over. (Before T13 the progress row was named just `backfill`; Driftless renames it on start.)
 
 ## The replication slot (important)
 
@@ -70,10 +72,11 @@ down long enough to exceed it, Postgres **invalidates** the slot to protect its 
 gone, so Driftless refuses to start and prints these steps:
 
 1. `SELECT pg_drop_replication_slot('driftless_slot');`
-2. Delete the Meilisearch index `products`: documents of rows deleted during the outage would otherwise survive.
-3. `DELETE FROM driftless_state WHERE name = 'backfill';`
+2. Delete every mirrored Meilisearch index (`products`, `customers`) and the Redis keys under every prefix
+   (`product:*`, `customer:*`): entries of rows deleted during the outage would otherwise survive.
+3. `DELETE FROM driftless_state WHERE name LIKE 'backfill%';`
 4. Start Driftless. It creates a new slot *first* (so nothing written from then on is missed), then sees the empty
-   index and backfills every row (D-024). Check with `node scripts/reconcile.ts`.
+   sinks and backfills every row of every table (D-024). Check with `node scripts/reconcile.ts`.
 
 Watch for it before it happens: `wal_status = 'unreserved'` means the slot is already past the cap, and Driftless logs
 a warning on start.

@@ -19,15 +19,20 @@ meili=${MEILI_HOST:-http://127.0.0.1:7700}
 auth="Authorization: Bearer ${MEILI_MASTER_KEY:-driftless-dev-master-key}"
 workload_log=$(mktemp)
 start_connector() { DRIFTLESS_BACKFILL=1 DRIFTLESS_BACKFILL_DEBUG_DELAY_MS=$delay docker compose up -d connector >/dev/null 2>&1; }
-done_yet() { docker compose logs connector --since "$since" 2>/dev/null | grep -q 'backfill: done'; }
+done_yet() { docker compose logs connector --since "$since" 2>/dev/null | grep -q 'backfill: every table is backfilled'; }
 
+# Every mirrored table's index (from the config, T13), and the whole cache (its database holds only Driftless's keys).
+indexes=$(node --input-type=module -e "const c = await import('./src/config.ts'); console.log(c.mappings.map((m) => m.index.uid).join(' '))")
 docker compose stop connector >/dev/null 2>&1 || true
-curl -s -X DELETE -H "$auth" "$meili/indexes/products" >/dev/null
-until [ "$(curl -s -o /dev/null -w '%{http_code}' -H "$auth" "$meili/indexes/products")" = 404 ]; do sleep 0.5; done
+for index in $indexes; do
+  curl -s -X DELETE -H "$auth" "$meili/indexes/$index" >/dev/null
+  until [ "$(curl -s -o /dev/null -w '%{http_code}' -H "$auth" "$meili/indexes/$index")" = 404 ]; do sleep 0.5; done
+done
+docker compose exec -T redis redis-cli FLUSHDB >/dev/null 2>&1 || true
 # Forget any earlier backfill's progress: resuming one into a freshly emptied index would skip rows.
-docker compose exec -T postgres psql -U driftless -d shop -qc "DELETE FROM driftless_state WHERE name = 'backfill'" >/dev/null 2>&1 || true
-echo "backfill-race: index emptied; backfill with a ${delay} ms read->write delay, writes at ${rate} tx/s for ${seconds} s" \
-  "$([ "$kill_every" -gt 0 ] && echo ", SIGKILL every ${kill_every} s")"
+docker compose exec -T postgres psql -U driftless -d shop -qc "DELETE FROM driftless_state WHERE name LIKE 'backfill%'" >/dev/null 2>&1 || true
+echo "backfill-race: indexes ($indexes) and cache emptied; backfill with a ${delay} ms read->write delay, writes at" \
+  "${rate} tx/s (${WORKLOAD_MIX:-products} mix) for ${seconds} s$([ "$kill_every" -gt 0 ] && echo ", SIGKILL every ${kill_every} s")"
 
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 start_connector

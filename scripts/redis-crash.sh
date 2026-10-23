@@ -32,7 +32,7 @@ docker compose --profile connector down -v >/dev/null 2>&1 || true # this projec
 docker compose up -d --wait >/dev/null 2>&1
 docker compose exec -T postgres psql -q -U driftless -d shop -v rows=20000 -f /db/seed.sql >/dev/null
 docker compose up -d --build --wait connector >/dev/null 2>&1
-for _ in $(seq 1 180); do docker compose logs connector 2>&1 | grep -q 'backfill: done' && break; sleep 1; done
+for _ in $(seq 1 180); do docker compose logs connector 2>&1 | grep -q 'backfill: every table is backfilled' && break; sleep 1; done
 echo "redis-crash: $(docker compose exec -T redis redis-cli CONFIG GET appendonly | tr '\n' ' ')$(docker compose exec -T redis redis-cli CONFIG GET appendfsync | tr '\n' ' ')$(docker compose exec -T redis redis-cli CONFIG GET save | tr '\n' ' ')"
 
 workload_log=$(mktemp)

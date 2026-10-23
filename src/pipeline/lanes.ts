@@ -52,7 +52,9 @@ export function createLanes({ count, batchMax, apply, onApplied, onError }: Opti
 
   return {
     push(entry: Entry): void {
-      const lane = lanes[laneOf(entry.change.pk, count)]!;
+      // Keyed by table and id (T13): one row's changes stay in one lane, in order; rows of different tables that
+      // happen to share an id don't wait for each other.
+      const lane = lanes[laneOf(`${entry.change.table}:${entry.change.pk}`, count)]!;
       lane.queue.push(entry);
       if (!lane.busy) void run(lane);
     },

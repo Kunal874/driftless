@@ -7,9 +7,18 @@ const valid = () => ({
   sync: { table: 'public.products', index: 'products', primaryKey: 'id' },
 });
 
+const problemsOf = (raw: unknown): string => {
+  try {
+    parseConfig(raw);
+  } catch (err) {
+    return (err as Error).message;
+  }
+  return '';
+};
+
 describe('parseConfig', () => {
-  it('accepts the shipped shape', () => {
-    expect(parseConfig(valid())).toEqual(valid());
+  it('accepts the single-table shape and returns it as a one-item list', () => {
+    expect(parseConfig(valid())).toEqual({ ...valid(), sync: [valid().sync] });
   });
 
   it('reports every problem at once, each naming its setting', () => {
@@ -17,16 +26,10 @@ describe('parseConfig', () => {
     bad.postgres.port = '5440';
     bad.sync.table = 'products';
     bad.sync.tabel = 'public.products'; // a typo of a known key
-    const message = (() => {
-      try {
-        parseConfig(bad);
-      } catch (err) {
-        return (err as Error).message;
-      }
-    })();
+    const message = problemsOf(bad);
     expect(message).toMatch(/postgres\.port must be a whole number/);
     expect(message).toMatch(/sync\.table 'products' must be schema\.table/);
-    expect(message).toMatch(/sync\.tabel: unknown setting \(expected: table, index, primaryKey, columns\)/);
+    expect(message).toMatch(/sync\.tabel: unknown setting \(expected: table, index, primaryKey, columns, redisKeyPrefix\)/);
   });
 
   it('refuses secrets in the file and says where they go instead', () => {
@@ -44,7 +47,7 @@ describe('parseConfig', () => {
 
   it('checks column lists: one kind only, primary key kept, no duplicates', () => {
     const withColumns = (columns: unknown) => ({ ...valid(), sync: { ...valid().sync, columns } });
-    expect(parseConfig(withColumns({ exclude: ['description'] })).sync.columns).toEqual({ exclude: ['description'] });
+    expect(parseConfig(withColumns({ exclude: ['description'] })).sync[0]!.columns).toEqual({ exclude: ['description'] });
     expect(() => parseConfig(withColumns({ include: ['a'], exclude: ['b'] }))).toThrow(/exactly one of/);
     expect(() => parseConfig(withColumns({ include: ['name'] }))).toThrow(/must contain the primary key 'id'/);
     expect(() => parseConfig(withColumns({ exclude: ['id'] }))).toThrow(/can't contain the primary key 'id'/);
@@ -56,10 +59,11 @@ describe('parseConfig', () => {
 describe('parseConfig: the redis section (T12)', () => {
   const withRedis = (redis: unknown) => ({ ...valid(), redis });
 
-  it('is optional, and accepted with a URL and a key prefix', () => {
+  it('is optional; the single-table keyPrefix becomes that table\'s prefix', () => {
     expect(parseConfig(valid()).redis).toBeUndefined();
-    expect(parseConfig(withRedis({ url: 'redis://127.0.0.1:6381', keyPrefix: 'product:' })).redis)
-      .toEqual({ url: 'redis://127.0.0.1:6381', keyPrefix: 'product:' });
+    const config = parseConfig(withRedis({ url: 'redis://127.0.0.1:6381', keyPrefix: 'product:' }));
+    expect(config.redis).toEqual({ url: 'redis://127.0.0.1:6381' });
+    expect(config.sync[0]!.redisKeyPrefix).toBe('product:');
   });
 
   it('refuses a password, as a key or inside the URL, pointing to REDIS_PASSWORD', () => {
@@ -72,6 +76,58 @@ describe('parseConfig: the redis section (T12)', () => {
   it('rejects a bad URL scheme and a key prefix with glob or space characters', () => {
     expect(() => parseConfig(withRedis({ url: 'http://h:6379', keyPrefix: 'p:' }))).toThrow(/redis\.url/);
     expect(() => parseConfig(withRedis({ url: 'redis://h:6379', keyPrefix: 'p *' }))).toThrow(/redis\.keyPrefix/);
+  });
+});
+
+describe('parseConfig: several tables (T13)', () => {
+  const two = (extra: Record<string, unknown> = {}) => ({
+    ...valid(),
+    sync: [
+      { table: 'public.products', index: 'products', primaryKey: 'id', redisKeyPrefix: 'product:' },
+      { table: 'public.customers', index: 'customers', primaryKey: 'id', redisKeyPrefix: 'customer:' },
+    ],
+    redis: { url: 'redis://127.0.0.1:6381' },
+    ...extra,
+  });
+
+  it('accepts a list, each table with its own index and key prefix', () => {
+    const config = parseConfig(two());
+    expect(config.sync.map((m) => [m.table, m.index, m.redisKeyPrefix])).toEqual([
+      ['public.products', 'products', 'product:'],
+      ['public.customers', 'customers', 'customer:'],
+    ]);
+  });
+
+  it('gives a mapping without a prefix "<index>:"', () => {
+    const config = parseConfig({ ...valid(), sync: [{ table: 'public.a', index: 'alpha', primaryKey: 'id' }], redis: { url: 'redis://h:1' } });
+    expect(config.sync[0]!.redisKeyPrefix).toBe('alpha:');
+  });
+
+  it('names a bad entry by its position', () => {
+    const bad = two();
+    (bad.sync[1] as any).table = 'Customers';
+    expect(problemsOf(bad)).toMatch(/sync\[1\]\.table 'Customers' must be schema\.table/);
+  });
+
+  it('rejects a repeated table or index, overlapping prefixes, an empty list', () => {
+    const repeated = two();
+    repeated.sync[1]!.table = 'public.products';
+    repeated.sync[1]!.index = 'products';
+    const message = problemsOf(repeated);
+    expect(message).toMatch(/table public\.products is listed twice/);
+    expect(message).toMatch(/index products is used twice/);
+
+    const overlap = two();
+    overlap.sync[1]!.redisKeyPrefix = 'product:x:';
+    expect(problemsOf(overlap)).toMatch(/key prefix 'product:x:' overlaps 'product:'/);
+
+    expect(problemsOf({ ...valid(), sync: [] })).toMatch(/sync must name at least one table/);
+  });
+
+  it('refuses the single-table redis.keyPrefix with several tables, and a prefix without Redis', () => {
+    expect(problemsOf(two({ redis: { url: 'redis://h:1', keyPrefix: 'x:' } }))).toMatch(/redis\.keyPrefix works for one table only/);
+    const { redis, ...noRedis } = two();
+    expect(problemsOf(noRedis)).toMatch(/redisKeyPrefix needs a redis section/);
   });
 });
 

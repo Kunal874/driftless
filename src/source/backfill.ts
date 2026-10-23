@@ -25,11 +25,25 @@ type Row = Record<string, unknown>;
 
 export type BackfillState = { status: 'running'; after: string | null } | { status: 'done'; rows: number; finishedAt: string };
 
-// Reads where the last backfill got to (null when there has never been one).
-export async function readBackfillState(db: Client, stateTable: string): Promise<BackfillState | null> {
+// Where each table's backfill progress is saved (T13: one row per table).
+export const stateName = (table: string) => `backfill:${table}`;
+
+// Reads where the last backfill of `table` got to (null when there has never been one).
+export async function readBackfillState(db: Client, stateTable: string, table: string): Promise<BackfillState | null> {
   const q = stateTable.split('.').map((part) => db.escapeIdentifier(part)).join('.');
-  const { rows } = await db.query<{ value: BackfillState }>(`SELECT value FROM ${q} WHERE name = 'backfill'`);
+  const { rows } = await db.query<{ value: BackfillState }>(`SELECT value FROM ${q} WHERE name = $1`, [stateName(table)]);
   return rows[0]?.value ?? null;
+}
+
+// Before T13 there was one table and one progress row, named just 'backfill'. It belongs to the table that was
+// mirrored then, the first one in the config. Renamed once, so a finished backfill isn't redone and an
+// interrupted one resumes where it was.
+export async function migrateBackfillState(db: Client, stateTable: string, firstTable: string): Promise<void> {
+  const q = stateTable.split('.').map((part) => db.escapeIdentifier(part)).join('.');
+  await db.query(
+    `UPDATE ${q} SET name = $1 WHERE name = 'backfill' AND NOT EXISTS (SELECT 1 FROM ${q} WHERE name = $1)`,
+    [stateName(firstTable)],
+  );
 }
 
 type Options = {
@@ -120,8 +134,8 @@ export function createBackfill({ table, primaryKey, watermarkTable, stateTable, 
       const setMark = (mark: string) => db.query(`UPDATE ${q(watermarkTable)} SET mark = $1 WHERE id = 1`, [mark]);
       const save = (state: BackfillState) =>
         db.query(
-          `INSERT INTO ${q(stateTable)} (name, value) VALUES ('backfill', $1) ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value`,
-          [JSON.stringify(state)],
+          `INSERT INTO ${q(stateTable)} (name, value) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value`,
+          [stateName(table), JSON.stringify(state)],
         );
       const started = Date.now();
       let after = from;

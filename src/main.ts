@@ -9,36 +9,48 @@ import { bigIntToLsn, lsnToBigInt } from './source/lsn.ts';
 import { ensureIndex, meilisearchSink } from './sinks/meilisearch.ts';
 import type { Sink } from './sinks/sink.ts';
 import { createClient } from '@redis/client';
-import { redisSink } from './sinks/redis.ts';
+import { redisSink, type RedisClient } from './sinks/redis.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
-import { createBackfill, readBackfillState } from './source/backfill.ts';
+import { createBackfill, migrateBackfillState, readBackfillState } from './source/backfill.ts';
+import type { MappingConfig } from './config.ts';
 import { nextReadState } from './pipeline/backpressure.ts';
 import { batchSize, changesApplied, gaugeOf, lag, serveMetrics, writeSeconds } from './metrics.ts';
 
 const STATS_EVERY_MS = 5_000;
 const STATUS_EVERY_MS = 10_000; // well under Postgres's wal_sender_timeout (1 min)
 
-// The config is checked against the real table before anything is created anywhere (an index with the wrong
+// The config is checked against every real table before anything is created anywhere (an index with the wrong
 // primary key, a slot that starts holding WAL).
 const db = new pg.Client(config.pgConfig);
 await db.connect();
-await checkSync(db, config.table, config.index.primaryKey, config.namedColumns).catch(config.configError);
+for (const m of config.mappings) {
+  await checkSync(db, m.table, m.index.primaryKey, m.namedColumns).catch(config.configError);
+}
 
 const meili = new Meilisearch(config.meilisearch);
-await ensureIndex(meili, config.index.uid, config.index.primaryKey);
-// Every batch goes to every sink; it counts as applied only once all of them have it (D-029).
-const sinks: Sink[] = [meilisearchSink(meili.index(config.index.uid), config.table, config.keepColumn)];
+let redis: RedisClient | undefined;
 if (config.redis) {
-  const redis = createClient({ url: config.redis.url, password: config.redis.password });
+  redis = createClient({ url: config.redis.url, password: config.redis.password });
   // The client reconnects by itself; without a listener an 'error' event would crash the process. Writes that fail
   // meanwhile are retried by the sink (D-021), so here a lost connection is only worth a log line.
   redis.on('error', (err: Error) => console.warn(`redis: ${err.message}`));
   await redis.connect();
-  sinks.push(redisSink(redis, { table: config.table, keyPrefix: config.redis.keyPrefix, keep: config.keepColumn }));
+}
+
+// One mirror per configured table (T13): its sinks (the index, and the cache under its own key prefix) and its
+// backfill. A batch goes to every sink of its table and counts as applied only once all of them have it (D-029).
+type Mirror = { mapping: MappingConfig; sinks: Sink[]; backfill?: ReturnType<typeof createBackfill> };
+const mirrors = new Map<string, Mirror>();
+for (const m of config.mappings) {
+  await ensureIndex(meili, m.index.uid, m.index.primaryKey);
+  const sinks: Sink[] = [meilisearchSink(meili.index(m.index.uid), m.table, m.keepColumn)];
+  if (redis) sinks.push(redisSink(redis, { table: m.table, keyPrefix: m.redisKeyPrefix!, keep: m.keepColumn }));
+  mirrors.set(m.table, { mapping: m, sinks });
 }
 
 const startLsn = await ensureReplicationSetup(db, config);
+await migrateBackfillState(db, config.stateTable, config.mappings[0]!.table); // the pre-T13 progress row
 await db.end();
 
 // Both of the library's automatic acks are off (learn/task-03): one acks every message on receipt,
@@ -52,15 +64,18 @@ const lanes = createLanes({
   count: config.lanes,
   batchMax: config.batchMax,
   apply: async (changes) => {
-    await Promise.all(sinks.map(async (sink) => {
+    // A lane's batch can hold several tables' rows (lanes are keyed by table and id): each table's share goes to
+    // that table's sinks, all at once.
+    const byTable = Map.groupBy(changes, (change) => change.table);
+    await Promise.all([...byTable].flatMap(([table, group]) => mirrors.get(table)!.sinks.map(async (sink) => {
       const written = writeSeconds.startTimer({ sink: sink.name });
-      await sink.applyBatch(changes); // resolves only once this sink has really applied the writes
+      await sink.applyBatch(group); // resolves only once this sink has really applied the writes
       written();
-    }));
+    })));
     stats.changes += changes.length;
     stats.writes++;
     batchSize.observe(changes.length); // its count is the number of writes
-    for (const change of changes) changesApplied.inc({ op: change.op });
+    for (const change of changes) changesApplied.inc({ op: change.op, table: change.table });
   },
   onApplied: () => {
     void confirmApplied().catch(fail);
@@ -69,16 +84,20 @@ const lanes = createLanes({
   onError: fail,
 });
 
-const backfill = createBackfill({
-  table: config.table,
-  primaryKey: config.index.primaryKey,
-  watermarkTable: config.watermarkTable,
-  stateTable: config.stateTable,
-  chunk: config.backfill.chunk,
-  debugDelayMs: config.backfill.debugDelayMs,
-  push: (entry) => lanes.push(entry),
-  log: (message) => console.log(message),
-});
+for (const mirror of mirrors.values()) {
+  mirror.backfill = createBackfill({
+    table: mirror.mapping.table,
+    primaryKey: mirror.mapping.index.primaryKey,
+    watermarkTable: config.watermarkTable,
+    stateTable: config.stateTable,
+    chunk: config.backfill.chunk,
+    debugDelayMs: config.backfill.debugDelayMs,
+    push: (entry) => lanes.push(entry),
+    log: (message) => console.log(message),
+  });
+}
+const backfillOf = (mirror: Mirror) => mirror.backfill!;
+const skipped = new Set<string>(); // tables whose changes arrived although they're not configured (any more)
 
 const assemble = transactionAssembler();
 const queue: Pgoutput.Message[] = []; // bounded by backpressure below (D-025)
@@ -153,19 +172,29 @@ async function dispatch(txn: Transaction): Promise<void> {
   const tracked = checkpointer.track(lsnToBigInt(txn.commitEndLsn), txn.changes.length, txn.commitTime.getTime());
   for (const change of txn.changes) {
     if (change.op === 'truncate') {
-      if (change.tables.includes(config.table)) {
+      const cleared = change.tables.flatMap((table) => mirrors.get(table) ?? []);
+      if (cleared.length > 0) {
         // A barrier (D-018): everything before it is applied first, nothing after it starts before the clear.
-        backfill.truncated();
+        for (const mirror of cleared) backfillOf(mirror).truncated();
         await lanes.idle();
-        await Promise.all(sinks.map((sink) => sink.clear()));
+        await Promise.all(cleared.flatMap((mirror) => mirror.sinks.map((sink) => sink.clear())));
       }
       tracked.remaining--;
     } else if (change.table === config.watermarkTable) {
-      if (change.op !== 'delete') backfill.watermark(String(change.row.mark)); // may push a chunk into the lanes
+      // Every table's backfill sees the mark; only the one whose window it opens or closes reacts (random ids).
+      if (change.op !== 'delete') for (const mirror of mirrors.values()) backfillOf(mirror).watermark(String(change.row.mark));
       tracked.remaining--; // bookkeeping only: nothing to apply
     } else {
-      backfill.rowChanged(change);
-      lanes.push({ change, txn: tracked });
+      const mirror = mirrors.get(change.table);
+      if (mirror) {
+        backfillOf(mirror).rowChanged(change);
+        lanes.push({ change, txn: tracked });
+      } else {
+        // A table taken out of the config (and the publication) can still have changes in the slot's WAL: skip them.
+        if (!skipped.has(change.table)) console.warn(`driftless: skipping changes of ${change.table}: not in the config`);
+        skipped.add(change.table);
+        tracked.remaining--;
+      }
     }
   }
   await confirmApplied(); // a transaction with nothing for the lanes has no lane to report it
@@ -260,35 +289,43 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 // stream, so it can't start before the stream does.
 service.once('start', () => void maybeBackfill().catch(fail));
 
+// One table at a time (T13), in config order. Each table's progress is saved under its own name.
 async function maybeBackfill(): Promise<void> {
   const reader = new pg.Client(config.pgConfig);
   await reader.connect();
-  const state = await readBackfillState(reader, config.stateTable);
+  let ran = 0;
+  for (const mirror of mirrors.values()) if (await backfillTable(reader, mirror)) ran++;
+  await reader.end();
+  if (ran > 0) console.log(`backfill: every table is backfilled (${ran} of ${mirrors.size} needed it)`);
+}
+
+async function backfillTable(reader: pg.Client, mirror: Mirror): Promise<boolean> {
+  const { table } = mirror.mapping;
+  const state = await readBackfillState(reader, config.stateTable, table);
   let from: string | null | undefined; // undefined = no backfill this time
   if (state?.status === 'running') {
     from = state.after; // an earlier backfill was interrupted: resume after the last applied chunk
   } else if (config.backfill.enabled) {
     from = null; // asked for: DRIFTLESS_BACKFILL=1
   } else {
-    const { rows: [{ has_rows }] } = await reader.query(`SELECT EXISTS (SELECT 1 FROM ${config.table}) AS has_rows`);
+    const { rows: [{ has_rows }] } = await reader.query(`SELECT EXISTS (SELECT 1 FROM ${table}) AS has_rows`);
     // Any empty sink for a table with rows: a first start, a deleted index, or a sink just switched on (e.g. Redis).
     // The backfill rewrites every sink; for the ones already full that's a harmless repeat.
-    const emptiness = await Promise.all(sinks.map((sink) => sink.isEmpty()));
-    const empty = sinks.filter((_, i) => emptiness[i]).map((sink) => sink.name);
+    const emptiness = await Promise.all(mirror.sinks.map((sink) => sink.isEmpty()));
+    const empty = mirror.sinks.filter((_, i) => emptiness[i]).map((sink) => sink.name);
     if (has_rows && empty.length > 0) {
       from = null;
-      console.log(`backfill: empty sink(s): ${empty.join(', ')}`);
+      console.log(`backfill: ${table}: empty sink(s): ${empty.join(', ')}`);
     }
   }
-  if (from === undefined) {
-    await reader.end();
-    return;
-  }
-  console.log(from === null ? `backfill: starting (chunks of ${config.backfill.chunk} rows)` : `backfill: resuming after id ${from}`);
-  const { rows, dropped, filled, ms } = await backfill.run(reader, from);
-  await reader.end();
-  console.log(`backfill: done, ${rows} rows in ${ms} ms (${dropped} snapshot rows dropped and ${filled} only ` +
-    `filled in, because the stream had newer values)`);
+  if (from === undefined) return false;
+  console.log(from === null
+    ? `backfill: ${table}: starting (chunks of ${config.backfill.chunk} rows)`
+    : `backfill: ${table}: resuming after id ${from}`);
+  const { rows, dropped, filled, ms } = await backfillOf(mirror).run(reader, from);
+  console.log(`backfill: done, ${table}: ${rows} rows in ${ms} ms (${dropped} snapshot rows dropped and ${filled} ` +
+    `only filled in, because the stream had newer values)`);
+  return true;
 }
 
 console.log(`driftless: streaming slot ${config.slot}, resuming after ${startLsn} (${config.lanes} lanes, ` +

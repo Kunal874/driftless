@@ -60,10 +60,26 @@ describe('createLanes', () => {
   it('runs different lanes at the same time', () => {
     const sink = heldSink();
     const lanes = createLanes({ count: 8, batchMax: 100, apply: sink.apply, onApplied() {}, onError: failTest });
-    const second = ['2', '3', '4', '5', '6'].find((key) => laneOf(key, 8) !== laneOf('1', 8))!;
+    const lane = (pk: string) => laneOf(`public.products:${pk}`, 8); // routing key = table:pk (T13)
+    const second = ['2', '3', '4', '5', '6'].find((key) => lane(key) !== lane('1'))!;
     lanes.push({ change: change('1', 1), txn: { remaining: 1 } });
     lanes.push({ change: change(second, 2), txn: { remaining: 1 } });
     expect(sink.batches).toHaveLength(2); // both writes are in flight before either finished
+  });
+
+  it('routes by table and id: one row stays in order, equal ids of different tables are independent (T13)', async () => {
+    const sink = heldSink();
+    const lanes = createLanes({ count: 8, batchMax: 100, apply: sink.apply, onApplied() {}, onError: failTest });
+    const other = ['public.customers', 'public.a', 'public.b', 'public.c'].find(
+      (t) => laneOf(`${t}:7`, 8) !== laneOf('public.products:7', 8),
+    )!;
+    const customer = (n: number): RowChange => ({ op: 'update', table: other, pk: '7', row: { id: '7', n } });
+    lanes.push({ change: change('7', 1), txn: { remaining: 1 } });
+    lanes.push({ change: customer(10), txn: { remaining: 1 } });
+    expect(sink.batches).toHaveLength(2); // product #7 and customer #7 are written at the same time
+    lanes.push({ change: change('7', 2), txn: { remaining: 1 } });
+    await sink.release();
+    expect(ns(sink.batches)).toEqual([[1], [10], [2]]); // product #7's second change waited for its first
   });
 
   it('idle() resolves only after every lane has finished', async () => {

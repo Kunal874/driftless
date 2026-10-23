@@ -32,9 +32,16 @@ export async function ensureReplicationSetup(
     `SELECT schemaname || '.' || tablename AS name FROM pg_publication_tables WHERE pubname = $1`,
     [publication],
   );
-  // It's Driftless's own publication, so a table it now needs (e.g. the watermark table, added in T07) is added.
+  // It's Driftless's own publication, so it's kept equal to the config (T13): a table it now needs is added (e.g. the
+  // watermark table in T07, a newly configured one), a table no longer configured is dropped. Changes of a dropped
+  // table that are still in the slot's WAL may arrive anyway; dispatch skips them.
   for (const table of tables.filter((t) => !published.some((p) => p.name === t))) {
     await db.query(`ALTER PUBLICATION ${db.escapeIdentifier(publication)} ADD TABLE ${qualified(table)}`);
+    console.log(`driftless: publication ${publication}: added ${table}`);
+  }
+  for (const { name } of published.filter((p) => !tables.includes(p.name))) {
+    await db.query(`ALTER PUBLICATION ${db.escapeIdentifier(publication)} DROP TABLE ${qualified(name)}`);
+    console.log(`driftless: publication ${publication}: dropped ${name} (no longer in the config)`);
   }
 
   // The slot comes after the publication, so it never sees changes from before the publication existed.
@@ -63,11 +70,12 @@ export async function ensureReplicationSetup(
 function lostSlotHelp(slot: string, confirmed: string): string {
   return [
     `slot ${slot} was invalidated by Postgres: it held more WAL than max_slot_wal_keep_size allows, so the changes`,
-    `after ${confirmed} are gone and the index can't be trusted any more. To recover (every row is copied again):`,
+    `after ${confirmed} are gone and the index and cache can't be trusted any more. To recover (every row is copied again):`,
     `  1. SELECT pg_drop_replication_slot('${slot}');`,
-    `  2. delete the Meilisearch index (stale documents of rows deleted meanwhile would otherwise survive)`,
-    `  3. DELETE FROM driftless_state WHERE name = 'backfill';`,
-    `  4. start Driftless: it creates a new slot first, then backfills the empty index (D-024)`,
+    `  2. delete every mirrored Meilisearch index, and the Redis keys under every key prefix (entries of rows deleted`,
+    `     meanwhile would otherwise survive)`,
+    `  3. DELETE FROM driftless_state WHERE name LIKE 'backfill%';`,
+    `  4. start Driftless: it creates a new slot first, then backfills every empty index and cache (D-024)`,
     `(docs/ROLLBACK.md, "Lost replication slot")`,
   ].join('\n');
 }
