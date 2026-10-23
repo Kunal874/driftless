@@ -1,5 +1,7 @@
 # Driftless
 
+[![CI](https://github.com/Kunal874/driftless/actions/workflows/ci.yml/badge.svg)](https://github.com/Kunal874/driftless/actions/workflows/ci.yml)
+
 **Keeps a Meilisearch index in sync with a Postgres table by reading the database's write-ahead log, and proves the
 two never drift apart, even when the sync process is killed mid-write.**
 
@@ -24,6 +26,17 @@ versions and machine (Windows 11, Docker Desktop, 28 CPUs / 7.6 GiB visible to D
 | **Backfill while the table is being written** | 0 drift in **10 / 10** races (≈105 race windows each), using DBLog-style watermarks. [§5](docs/RESULTS.md#5-backfill-under-load-t07) |
 | **Meilisearch down for 5 minutes** at 600 tx/s | memory stayed bounded (backpressure; uncapped it grew 45 → 220 MiB and kept rising), connection kept alive, 0 drift after. [§6](docs/RESULTS.md#6-slow-sink-meilisearch-frozen-under-load-t08) |
 | **Driftless down for too long** | Postgres gives up the slot at a 1 GB WAL cap instead of filling its disk; Driftless refuses to run on a lost slot and prints the recovery steps; recovery tested at 0 drift. [§7](docs/RESULTS.md#7-wal-safety-a-dead-driftless-cant-fill-the-disk-t08) |
+
+**Every push re-proves the main claim.** CI type-checks, runs the unit tests, then starts the real stack on the
+runner: it seeds 20,000 rows, lets Driftless backfill them, SIGKILLs the connector about every 10 s under 200 tx/s of
+writes, and fails unless reconcile finds 0 drift ([`scripts/ci-e2e.sh`](scripts/ci-e2e.sh)).
+
+![Grafana during a crash test](docs/images/dashboard-chaos.png)
+
+*The provisioned dashboard during `scripts/chaos.sh 240 30 300`: 4 minutes at 300 tx/s with a SIGKILL about every 30 s.
+Each kill shows as a gap in "Connector up" and a lag spike while the restarted connector replays unconfirmed work.
+Backpressure never engaged, and once the run ended the WAL held for the slot drained to 56 bytes. Reconcile afterwards:
+279,180 rows = 279,180 documents, 0 drift.*
 
 Bugs found on the way, each with a repro and a write-up: a replication library acknowledging one byte too far
 ([BUG-001](docs/bugs/BUG-001-library-ack-off-by-one.md)), a backfill race that wrote stale rows back
@@ -197,6 +210,7 @@ and config validation. The claims are proven by scripts against the real stack:
 
 | Script | Proves |
 |---|---|
+| `scripts/ci-e2e.sh [ROWS] [CHAOS_SECONDS]` | what CI runs: fresh stack → backfill → SIGKILL chaos → reconcile 0 → self-test (locally: `COMPOSE_PROJECT_NAME=driftless-ci`) |
 | `scripts/reconcile.ts [--self-test]` | every row equals its document (the self-test plants drift and demands it's found) |
 | `scripts/chaos.sh DURATION KILL_EVERY RATE` | 0 drift with random SIGKILLs under load |
 | `scripts/backfill-race.sh DELAY RATE SECONDS [KILL_EVERY]` | backfill racing concurrent writes (and crashes) |

@@ -4,6 +4,26 @@
   "license": "MIT",
   "private": true,
   "description": "Keeps a Meilisearch index in sync with PostgreSQL by reading the WAL (logical replication).",
+  "keywords": [
+    "postgresql",
+    "meilisearch",
+    "change-data-capture",
+    "cdc",
+    "logical-replication",
+    "wal",
+    "search",
+    "sync",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Kunal874/driftless#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kunal874/driftless.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Kunal874/driftless/issues"
+  },
+  "author": "Kunal",
   "type": "module",
   "engines": {
     "node": ">=24"
