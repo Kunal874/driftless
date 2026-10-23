@@ -70,7 +70,7 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), every choice
 Needs Docker (with Compose v2), Node.js ≥ 24 and bash (on Windows: Git Bash).
 
 ```bash
-git clone <repo-url> driftless
+git clone https://github.com/Kunal874/driftless.git
 ```
 
 ```bash
