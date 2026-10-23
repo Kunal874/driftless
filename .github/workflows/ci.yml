@@ -1,0 +1,42 @@
+# Every push and pull request: type-check + unit tests, then the real thing: a fresh Postgres + Meilisearch stack,
+# Driftless backfilling it, random SIGKILLs under write load, and a row-by-row reconcile that must find 0 drift.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Typecheck + unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  e2e:
+    name: End to end (backfill, SIGKILL chaos, reconcile = 0)
+    needs: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - run: npm ci # the reconcile script runs on the runner
+      - run: scripts/ci-e2e.sh 20000 120
+      - name: Connector log
+        if: failure()
+        run: docker compose logs --no-color --tail 300 connector

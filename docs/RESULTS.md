@@ -259,6 +259,18 @@ is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearc
 | Image re-backfill | `DRIFTLESS_BACKFILL=1 docker compose up -d --build connector` (repairs the 564 changes the main index missed during the test, which reconcile had listed exactly) | 274,779 rows in 90.2 s → **0 / 0 / 0** |
 | Image under chaos | `scripts/chaos.sh 60 10 200` | 6 kills, 12,044 transactions (0 failed), 275,353 = 275,353, **0 / 0 / 0** |
 
+## 11. Polish checks (T11)
+
+2026-10-23. Correctness checks after the T11 changes (hardened `confirm()`, CI script), not benchmarks.
+
+| Check | Command | Result |
+|---|---|---|
+| Chaos after the `confirm()` hardening | `scripts/chaos.sh 60 10 200` | 0 drift (275,858 = 275,858) |
+| The CI end-to-end script, locally | `COMPOSE_PROJECT_NAME=driftless-ci scripts/ci-e2e.sh 20000 120` (fresh stack) | backfill 20,000 rows in 1.4 s; 24,060 transactions, 10 SIGKILLs; 20,116 = 20,116, **0 / 0 / 0**; self-test passed; 145 s in total |
+| Its guard | `scripts/ci-e2e.sh` in the default project, outside CI | refused (exit 2), nothing touched |
+| Dashboard screenshot run | `scripts/chaos.sh 240 30 300` with Prometheus + Grafana up | 7 kills, 0 failed transactions (count not captured); 279,180 = 279,180, **0 / 0 / 0**; image: `docs/images/dashboard-chaos.png` |
+| BUG-001 contract | `npm test` (`ack-contract.test.ts`) | library 2.5.0 writes position + 1, as the compensation assumes |
+
 ---
 
 ## Resume claims: status
