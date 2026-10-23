@@ -403,8 +403,11 @@ value. Proven the way the index is: reconcile, connector crashes, and a crash of
       policy, clear by prefix, `isEmpty`
 - [x] T12.4 Config: optional `redis: { url, keyPrefix }` (omit it = Meilisearch only); `REDIS_URL`, `REDIS_PASSWORD`
       (a secret: env only). Reconcile and its self-test cover Redis too
-- [ ] T12.5 Proofs → RESULTS §12: (a) backfill the existing rows into an empty Redis; (b) chaos with connector SIGKILLs
-      → 0 drift in both sinks; (c) reproduce the stale-key loss: `everysec` + Redis SIGKILL under load (bug note);
+- [x] T12.5 Proofs → RESULTS §12: (a) backfill the existing rows into an empty Redis; (b) chaos with connector SIGKILLs
+      → 0 drift in both sinks; (c) reproduce the stale-key loss: `everysec` + Redis SIGKILL under load (bug note).
+      **Deviation:** a process kill can't make `everysec` lose data (written data survives in the OS page cache), so
+      (c) runs three modes instead. Redis's defaults (snapshots only) lose data, while `everysec` and `always` don't.
+      It's recorded with D-029 rather than as a bug note, since it validates a design choice;
       (d) `always` + the same test → 0 drift; (e) Redis paused 2 min under load → backpressure, 0 drift; (f) what
       Redis adds to write time and lag at 1,000 tx/s
 - [ ] T12.6 CI e2e with Redis; dashboard panel per sink; README (diagram, config, results); `learn/task-12-redis.md`;

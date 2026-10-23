@@ -370,7 +370,10 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 - **Why `appendfsync always`:** with the default `everysec`, Redis acknowledges writes that may still be only in
   memory. A Redis crash can then lose the last second, and a key that was updated twice in that second goes back to an
   older value: a *stale* cache, the one failure a cache must never have. `always` makes Redis reply only after the
-  write is on disk. The cost is measured in T12.5.
+  write is on disk. **Proof (T12.5, RESULTS §12):** SIGKILL of Redis under load. Redis's out-of-the-box persistence
+  (snapshots only) → 6,238 wrong keys, 4,143 of them rolled back to older values; `always` → 0 drift. (`everysec` also
+  passed, because a process kill keeps written data in the OS page cache; its window opens on an OS crash or power
+  loss, which the test can't cause.) Cost: about +0.15 s of lag at 1,000 tx/s.
 - **Why readers never write:** in cache-aside, a reader that misses fills the cache from the database. A slow reader
   can then put back a value that a concurrent writer has just replaced (the stale-set race). Here the cache is filled
   only from the commit-ordered WAL, so a miss means "not cached yet", never "wrong".

@@ -2,16 +2,17 @@
 
 [![CI](https://github.com/Kunal874/driftless/actions/workflows/ci.yml/badge.svg)](https://github.com/Kunal874/driftless/actions/workflows/ci.yml)
 
-**Keeps a Meilisearch index in sync with a Postgres table by reading the database's write-ahead log, and proves the
-two never drift apart, even when the sync process is killed mid-write.**
+**Keeps a Meilisearch index and a Redis cache in sync with a Postgres table by reading the database's write-ahead
+log, and proves they never drift apart, even when the sync process (or Redis itself) is killed mid-write.**
 
 The usual way to keep search in sync is a *dual write*: the app saves to Postgres, then also updates the search index.
 When the second write fails, or two requests race, the index silently disagrees with the database, and nobody
 notices until a customer searches. Driftless removes the second write. The app writes only to Postgres. Driftless
-streams every committed change out of Postgres's WAL (logical replication) and applies it to Meilisearch, at least
-once and in commit order per row, and it tells Postgres "done" only after the change is really in the index.
+streams every committed change out of Postgres's WAL (logical replication) and applies it to Meilisearch and to a
+Redis cache, at least once and in commit order per row, and it tells Postgres "done" only after the change is really
+in both.
 
-Written in TypeScript on Node 24 (run directly, no build step). Postgres 17, Meilisearch 1.54, Docker Compose.
+Written in TypeScript on Node 24 (run directly, no build step). Postgres 17, Meilisearch 1.54, Redis 8, Docker Compose.
 
 ## Results
 
@@ -55,16 +56,17 @@ flowchart LR
   route --> l2[lane …]
   route --> ln[lane N]
   l1 & l2 & ln -->|batched, coalesced<br/>upserts / deletes| meili[(Meilisearch)]
-  meili -->|task succeeded| cp[Checkpointer]
+  l1 & l2 & ln -->|same batch,<br/>one MULTI| redis[(Redis cache)]
+  meili & redis -->|both applied| cp[Checkpointer]
   cp -->|confirm LSN<br/>only after apply| pg
   bf[Backfill<br/>with watermarks] -.->|existing rows| route
 ```
 
 1. **Read the WAL, never dual-write.** A replication slot makes Postgres keep every change until Driftless confirms it,
    across restarts.
-2. **Confirm only after apply.** A transaction's end position is confirmed only once Meilisearch reports every one of
-   its changes `succeeded`, and only once everything before it is too: the checkpointer confirms the end of the
-   unbroken run of applied transactions. A crash at any moment replays from the last confirmed point.
+2. **Confirm only after apply, in every sink.** A transaction's end position is confirmed only once Meilisearch *and*
+   Redis have applied every one of its changes, and only once everything before it is too: the checkpointer confirms
+   the end of the unbroken run of applied transactions. A crash at any moment replays from the last confirmed point.
 3. **Replays are harmless.** Writes are idempotent upserts and deletes by primary key, so at-least-once delivery has
    an exactly-once effect.
 4. **Order per row, parallel across rows.** Changes are routed by a hash of the primary key into N ordered lanes, so one
@@ -74,6 +76,9 @@ flowchart LR
 6. **Fail-stop.** On any error it can't safely retry, Driftless exits; Docker restarts it and it resumes from the slot.
 7. **Backpressure, not buffering.** At 50,000 waiting changes it stops reading the socket. TCP pushes back and the
    backlog waits in Postgres's WAL, which was keeping it anyway.
+8. **A cache that is never stale.** Only Driftless writes the cache, from the commit-ordered WAL (readers never fill it
+   on a miss), so the classic cache-aside race can't put an old value back. Redis acknowledges a write only once it's
+   in its fsynced append-only file, so a Redis crash can't roll a key back either ([D-029](docs/DECISIONS.md)).
 
 The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), every choice and its reason in
 [docs/DECISIONS.md](docs/DECISIONS.md), and step-by-step flows in [docs/FLOW.md](docs/FLOW.md).
@@ -90,7 +95,8 @@ git clone https://github.com/Kunal874/driftless.git
 cd driftless && npm ci
 ```
 
-Start Postgres (with `wal_level=logical`) and Meilisearch. Both are bound to 127.0.0.1, with local-dev credentials:
+Start Postgres (with `wal_level=logical`), Meilisearch and Redis. All are bound to 127.0.0.1, with local-dev
+credentials:
 
 ```bash
 docker compose up -d --wait
@@ -102,7 +108,8 @@ Create 100,000 demo products (on Windows Git Bash, put `MSYS_NO_PATHCONV=1 ` in 
 docker compose exec -T postgres psql -U driftless -d shop -f /db/seed.sql
 ```
 
-Start Driftless. It sees an empty index, copies the existing rows (backfill), then streams new changes:
+Start Driftless. It sees an empty index and cache, copies the existing rows into both (backfill), then streams new
+changes:
 
 ```bash
 docker compose --profile connector up -d --build connector
@@ -113,7 +120,7 @@ docker compose logs -f connector
 ```
 
 Write to Postgres (a random mix of updates, inserts and deletes at 200 tx/s for 30 s), then check every row against
-its document:
+its document and its cache entry:
 
 ```bash
 scripts/workload.sh 200 30
@@ -127,6 +134,12 @@ It should end with `OK: no drift`. Search the index:
 
 ```bash
 curl -s http://127.0.0.1:7700/indexes/products/search -H 'Authorization: Bearer driftless-dev-master-key' -H 'Content-Type: application/json' -d '{"q":"chair","limit":3}'
+```
+
+Read one product from the cache (each field is JSON):
+
+```bash
+docker compose exec redis redis-cli HGETALL product:7
 ```
 
 Dashboards (Prometheus + Grafana, then open http://127.0.0.1:3000):
@@ -155,14 +168,17 @@ to):
     "index": "products",
     "primaryKey": "id",
     "columns": { "exclude": ["description"] }
-  }
+  },
+  "redis": { "url": "redis://127.0.0.1:6381", "keyPrefix": "product:" }
 }
 ```
 
 `columns` is optional: `include` (a list that must contain the primary key) or `exclude`; without it, every column
-becomes a document field. The file is validated in full at start, every problem reported at once. Then it's checked
-against the real table (the primary key must match, named columns must exist) before anything is created. Secrets are
-refused in the file: they come from environment variables.
+becomes a document field (and a cache field). `redis` is optional too: without it, Driftless keeps only the index.
+Switching it on for an existing table fills the cache by itself (a backfill starts when any sink is empty). The file is
+validated in full at start, every problem reported at once. Then it's checked against the real table (the primary key
+must match, named columns must exist) before anything is created. Secrets are refused in the file, including a
+password inside the Redis URL: they come from environment variables.
 
 **Environment variables** override the file or tune the pipeline:
 
@@ -172,10 +188,12 @@ refused in the file: they come from environment variables.
 | `PGPASSWORD` | `driftless` (local dev) | never in the file |
 | `MEILI_HOST` | from the file | |
 | `MEILI_MASTER_KEY` | `driftless-dev-master-key` (local dev) | never in the file |
+| `REDIS_URL` | from the file | only when the file has a `redis` section |
+| `REDIS_PASSWORD` | none (local dev) | never in the file |
 | `DRIFTLESS_LANES` | `8` | parallel ordered lanes. `1` gives the lowest steady lag on Meilisearch, 8 the fastest catch-up ([D-027](docs/DECISIONS.md)) |
 | `DRIFTLESS_BATCH_MAX` | `5000` | most changes in one write |
 | `DRIFTLESS_MAX_PENDING` | `50000` | stop reading the stream at this many waiting changes; resume at half |
-| `DRIFTLESS_BACKFILL` | off | `1` = copy all existing rows on start (it also starts by itself when the index is empty and the table isn't) |
+| `DRIFTLESS_BACKFILL` | off | `1` = copy all existing rows on start (it also starts by itself when the index or the cache is empty and the table isn't) |
 | `DRIFTLESS_BACKFILL_CHUNK` | `10000` | rows per backfill chunk |
 | `DRIFTLESS_METRICS_HOST` / `_PORT` | `127.0.0.1` / `9464` | `GET /metrics` |
 | `DRIFTLESS_LOG_TXNS` | off | `1` = log every transaction |
@@ -188,7 +206,7 @@ or `FULL`. Driftless creates its own publication, slot and two small bookkeeping
 
 `GET :9464/metrics` serves Prometheus metrics:
 - `driftless_lag_seconds`: commit → applied *and* confirmable;
-- `driftless_write_seconds` and `driftless_batch_changes`;
+- `driftless_write_seconds{sink}` (one write to Meilisearch or Redis) and `driftless_batch_changes`;
 - `driftless_changes_applied_total{op}`;
 - the gauges changes waiting, transactions in flight, reading paused and confirmed LSN;
 - `driftless_slot_retained_wal_bytes`, the WAL Postgres keeps for the slot.
@@ -214,7 +232,8 @@ and config validation. The claims are proven by scripts against the real stack:
 | `scripts/reconcile.ts [--self-test]` | every row equals its document (the self-test plants drift and demands it's found) |
 | `scripts/chaos.sh DURATION KILL_EVERY RATE` | 0 drift with random SIGKILLs under load |
 | `scripts/backfill-race.sh DELAY RATE SECONDS [KILL_EVERY]` | backfill racing concurrent writes (and crashes) |
-| `scripts/slow-sink.sh PAUSE RATE MAX_PENDING` | bounded memory while Meilisearch is frozen |
+| `scripts/slow-sink.sh PAUSE RATE MAX_PENDING [SERVICE]` | bounded memory while Meilisearch (or `redis`) is frozen |
+| `scripts/redis-crash.sh always\|everysec\|rdb` | SIGKILL Redis under load, then reconcile the cache (own compose project) |
 | `scripts/bench-drain.sh LANES BATCH_MAX RATE SECONDS` | backlog drain throughput |
 | `node scripts/bench-lag.ts RATE SECONDS CLIENTS` | end-to-end lag quantiles at a fixed write rate |
 | `node scripts/repro-ack-off-by-one.ts` | reproduces BUG-001 |
@@ -222,7 +241,8 @@ and config validation. The claims are proven by scripts against the real stack:
 ## Limitations
 
 - One table → one index per Driftless instance; single-column primary keys; plain lower-case table names.
-- Meilisearch only (the sink is one module, `src/sinks/meilisearch.ts`).
+- Two sinks: Meilisearch and Redis (each one module behind `src/sinks/sink.ts`). Every write waits for the slower one,
+  which is Meilisearch.
 - Schema changes (`ALTER TABLE`) are untested. A dropped column's old values would stay in documents until each row is
   rewritten or a fresh backfill runs.
 - A slot lost to the WAL cap needs manual recovery (on purpose: it involves deleting the index).

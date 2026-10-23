@@ -24,16 +24,16 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
  │ stream ─► decode ─► router: hash(pk) % N ─► lanes 0..N-1 (ordered, bounded)  │
  │                                                  │ natural batch ≤ 5000      │
  │                                                  ▼                           │
- │ checkpointer ◄─── "txn X applied" ◄─────── sink: Meilisearch writer          │
- │      │                                                                       │
+ │ checkpointer ◄── "txn X applied" ◄── sinks, in parallel: Meilisearch + Redis │
+ │      │            (only once EVERY sink has applied the batch, D-029)        │
  │      └─► ack commit LSN to Postgres (only after apply) → slot advances       │
  │                                                                              │
  │ backfill (T07): chunked SELECT between watermarks ─► same lanes              │
  │ metrics  (T09): /metrics ◄── Prometheus ◄── Grafana                          │
- └──────────────────────────────────┬───────────────────────────────────────────┘
-                                    │ HTTP: documents API + tasks API (port 7700)
-                                    ▼
-                         Meilisearch index "products"
+ └────────────────────┬──────────────────────────────────────┬──────────────────┘
+                      │ HTTP: documents + tasks API (7700)   │ RESP3, MULTI per batch (6381)
+                      ▼                                      ▼
+           Meilisearch index "products"         Redis hashes "product:{id}" (T12)
 ```
 
 ## Invariants (never break these, not even to make a test pass)
@@ -58,6 +58,8 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Confirm protocol | ack applied txns at their exact end via the checkpointer; idle confirms; keepalive replies (D-019) | `src/main.ts`, `src/source/lsn.ts` | T03, T06 | ✅ |
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | ✅ |
 | Meilisearch sink | per lane batch: `coalesce` → ≤ 2 parallel writes (upserts, deletes), each waited to `succeeded`; `clear()` for TRUNCATE; retry policy D-021 | `src/sinks/meilisearch.ts` | T04, T06 | ✅ |
+| Sink contract | `{ name, applyBatch, clear, isEmpty }`; every batch goes to every sink in parallel, applied only when all have it; a backfill starts when any sink is empty (D-029) | `src/sinks/sink.ts`, `src/main.ts` | T12 | ✅ |
+| Redis sink | one hash per row (`product:{id}`, JSON-encoded fields); the same `coalesce`; one MULTI per batch (`DEL` + `HSET` of sent fields); D-021 retries; `clear()` = `SCAN` + `UNLINK` on the prefix; Redis with AOF `appendfsync always` | `src/sinks/redis.ts`, `docker-compose.yml` | T12 | ✅ |
 | Reconcile + chaos | prove zero drift under crashes (self-testing checker; random SIGKILLs under load) | `scripts/reconcile.ts`, `scripts/chaos.sh` | T05 | ✅ |
 | Router, lanes, batcher | FNV-1a routing, ordered lanes, natural batching ≤ batchMax (D-022) | `src/pipeline/lanes.ts` | T06 | ✅ |
 | Checkpointer | safe LSN = end of the unbroken run of applied transactions | `src/pipeline/checkpointer.ts` | T06 | ✅ |
@@ -96,6 +98,8 @@ type Transaction = {
   connection, queried at scrape time).
 - **Driftless → Meilisearch:** HTTP. Writes go to the documents API and return a task id;
   Driftless polls the tasks API until the task `succeeded` before counting it as applied.
+- **Driftless → Redis (T12):** one connection (node-redis, RESP3); one MULTI/EXEC per lane batch. Redis replies only
+  after the write is in its fsynced AOF, so a reply means "applied and durable". Nothing else writes the cache.
 - **Prometheus → Driftless (T09):** Prometheus scrapes `GET /metrics` (port 9464) every 5 s; Grafana reads Prometheus.
   Lag = commit time (from the WAL) → the moment the transaction becomes confirmable (checkpointer callback).
 - **No frontend, no user auth.** Everything is local. Meilisearch is protected by a dev master
@@ -126,12 +130,12 @@ driftless/
 │   ├── config.ts             loads the config file + env vars: every setting is read here (T03, T10)
 │   ├── config-file.ts        validates the config file (T10)
 │   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07); ack-contract.test.ts (T11)
-│   ├── sinks/                document.ts, meilisearch.ts (T04)
+│   ├── sinks/                document.ts, meilisearch.ts (T04); sink.ts, redis.ts (T12)
 │   ├── pipeline/             lanes.ts, checkpointer.ts (T06), backpressure.ts (T08)
 │   └── metrics.ts            Prometheus metrics + GET /metrics (T09)
 ├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05),
 │                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08), bench-lag.ts (T09),
-│                           ci-e2e.sh (T11)
+│                           ci-e2e.sh (T11), redis-crash.sh (T12)
 ├── docker/                 prometheus/prometheus.yml, grafana/ provisioning + dashboard JSON (T09)
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md

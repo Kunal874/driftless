@@ -9,8 +9,8 @@ run, with its command, date, versions and machine (CONSTRAINTS rule 7). Unmeasur
 |---|---|
 | Host | Windows 11, Docker Desktop 4.83.0 (engine 29.6.2); the engine sees 28 CPUs and ~7.6 GiB RAM |
 | Not a quiet machine | other projects' containers ran at the same time (online-judge-v2, reachinbox-scheduler) |
-| Postgres / Meilisearch | 17.11 / 1.54.3 (pinned, D-010) |
-| Driftless | Node 24.18.0 (`node:24.18.0-alpine` in the `connector` service), pg-logical-replication 2.5.0, meilisearch-js 0.62.0 |
+| Postgres / Meilisearch / Redis | 17.11 / 1.54.3 / 8.10.1 since T12 (pinned, D-010) |
+| Driftless | Node 24.18.0 (`node:24.18.0-alpine` in the `connector` service), pg-logical-replication 2.5.0, meilisearch-js 0.62.0, @redis/client 6.3.0 (T12) |
 | Metrics (T09) | prom-client 15.1.3; Prometheus 3.15.0 and Grafana 13.2.3 (profile `metrics`, not in the measured path) |
 | Data | `db/seed.sql` 100,000 rows (deterministic, D-016), workload mix 60/20/10/10 (`scripts/workload.sh`) |
 
@@ -272,6 +272,52 @@ is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearc
 | **CI on GitHub**, first run | push of `6b67aaa` → Actions run 39935636390 (ubuntu-24.04) | unit 13 s; e2e 2 min 45 s: backfill 20,000 rows in 1.8 s; 24,057 transactions, **11 SIGKILLs**; 20,239 = 20,239, **0 / 0 / 0**; self-test passed |
 | BUG-001 contract | `npm test` (`ack-contract.test.ts`) | library 2.5.0 writes position + 1, as the compensation assumes |
 
+## 12. The Redis cache as a second sink (T12)
+
+2026-10-23. Redis 8.10.1 (AOF, `appendfsync always`), `@redis/client` 6.3.0, 8 lanes / `batchMax` 5000. Reconcile
+compares every row with its Meilisearch document **and** its Redis hash.
+
+**Correctness on the main stack** (~280k rows):
+
+| Check | Command | Result |
+|---|---|---|
+| Switching Redis on for existing rows | connector restarted with the new config; Redis empty | "empty sink(s): redis" → backfill of **279,652 rows in 84 s** → 279,652 = documents = keys, **0 / 0 / 0**; self-test passed for both targets |
+| Connector crashes | `scripts/chaos.sh 180 15 300` | 53,887 transactions, **11 SIGKILLs**; 282,154 rows = documents = keys, **0 / 0 / 0** in both |
+| Redis frozen | `scripts/slow-sink.sh 120 300 50000 redis` | 2 min frozen under 300 tx/s: connection survived, connector memory 42–81 MiB, WAL held peaked at 22 MB and drained to 56 bytes; 284,640 = documents = keys, **0 / 0 / 0**. (Backpressure didn't engage: ~36k changes stayed under the 50k cap.) |
+
+**Redis crash: what its durability setting decides** (`COMPOSE_PROJECT_NAME=driftless-redis scripts/redis-crash.sh
+MODE 200 150 100`: a fresh stack per mode, 20,000 seeded rows, 150 s at 200 tx/s, Redis SIGKILLed at 100 s and started
+again):
+
+| Mode | What it is | Transactions | Redis after the crash | Meilisearch |
+|---|---|---|---|---|
+| `rdb` | Redis's out-of-the-box setup: no AOF, a snapshot every 60 s | 30,156 | **6,238 wrong keys**: 4,143 holding an *older* value, 1,120 missing, 975 deleted rows back | 0 drift |
+| `everysec` | AOF, fsync once a second (the AOF default) | 30,308 | 0 drift | 0 drift |
+| **`always`** | AOF, fsync before every reply (**what Driftless ships**) | 30,055 | **0 drift** | 0 drift |
+
+- **`rdb` is the failure D-029 exists for.** Redis said OK to writes that lived only in memory, Driftless confirmed
+  them, and the crash took the cache back to its last snapshot. For example, product #1's cached price went back to
+  99,676 while Postgres says 92,098. Nothing would ever repair it: those changes were confirmed and won't be re-sent.
+- **`everysec` passing is expected, and not a proof that it's safe.** A process kill leaves everything Redis has already
+  `write()`-ten in the operating system's page cache, so it survives. `everysec`'s window (up to 1 s of writes) opens on
+  an OS crash or power loss, which this setup can't cause. `always` closes it.
+
+**What Redis costs in lag** (`node scripts/bench-lag.ts 1000 60 8`, fresh 20k-row stack, A-B-A; "off" = the same
+connector with a config without `redis`):
+
+| Order | Redis | Lag p50 | p95 | p99 | Redis write p50 | Meilisearch write p50 |
+|---|---|---|---|---|---|---|
+| 1 | on | 0.71 s | 1.48 s | 2.62 s ¹ | 0.03 s | 0.41 s |
+| 2 | off | 0.69 s | 1.04 s | 1.24 s | (none) | 0.39 s |
+| 3 | on | 0.85 s | 1.20 s | 1.38 s | 0.03 s | 0.43 s |
+
+¹ pgbench fell behind its own schedule in that run (schedule lag 8.5 s), then caught up in a burst: shown, not used.
+
+Redis adds about **+0.15 s** at p50 and p99 (runs 2 → 3). That's not Redis's own write time (30 ms): every batch now waits
+for both sinks, and the connector does more work per batch. **Index size matters far more:** the same 1,000 tx/s on the
+main stack's 284,640-document index gave lag p50 12.33 s, p99 29.49 s (Meilisearch write p50 5.74 s, p99 27.60 s;
+Redis write p50 0.08 s), the vocabulary-growth effect of §8.
+
 ---
 
 ## Resume claims: status
@@ -281,4 +327,5 @@ is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearc
 | 0 mismatched documents out of [N] after [M] updates/deletes while SIGKILLed every [30 s] | **measured (T09 headline, §1)**: **0 missing / extra / mismatched out of 261,113 documents after 1,197,314 transactions at 1,000 tx/s, with 36 SIGKILLs** (~every 30 s for 20 min) |
 | End-to-end lag p99 < [X] ms at [N] writes/s | **measured (§8, §9)**: p99 **< 4 s at 500 tx/s and < 5 s at 1,000 tx/s** (commit in Postgres → searchable in Meilisearch, 8 lanes); 3.8 s at 1,000 tx/s with 1 lane. Kept up with ~4,800 tx/s, the most this machine's Postgres could generate. Lag is bounded by Meilisearch's ~1 s per-batch indexing on a 150–190k-document index |
 | Lanes + batching raised throughput from [A] to [B] | **measured**: 9 → 6,752 transactions/s (backlog drain on a ~105k-document index, §4); the same command gives 2,810 tx/s on a 195k-document index (§4 note, §9) |
+| A cache that is never stale (T12) | **measured (§12)**: the Redis cache stays exact under connector SIGKILLs (11 kills, 0 drift over 282,154 rows) and under a **Redis SIGKILL** with `appendfsync always` (0 drift). With Redis's default persistence the same crash left **6,238 wrong keys** (4,143 rolled back to older values). Redis adds ~0.15 s of lag at 1,000 tx/s |
 | Debugging story | BUG-001 (library ack off-by-one); **BUG-002** (backfill race: 42 docs wrong → fixed with watermarks); **BUG-003** (the watermark algorithm assumed full row images; Postgres omits unchanged TOAST → 1 doc → 0) |

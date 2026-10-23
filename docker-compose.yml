@@ -48,9 +48,11 @@ services:
     image: redis:8.10.1-alpine
     # The cache Driftless keeps in sync, next to the index (T12, D-029). AOF with appendfsync=always: Redis replies only
     # once a write is on disk, so whatever Driftless counts as applied survives a Redis crash. The default (everysec)
-    # can lose the last second, which can roll a key back to an OLDER value: a stale cache (reproduced in T12.5).
-    # REDIS_APPENDFSYNC exists only for that experiment. RDB snapshots are off (--save ""): the AOF is the copy.
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "${REDIS_APPENDFSYNC:-always}", "--save", ""]
+    # can lose the last second on an OS crash or power loss, which can roll a key back to an OLDER value: a stale cache.
+    # RDB snapshots are off (--save ""): the AOF is the copy. The three REDIS_* variables exist only for the crash
+    # experiment (scripts/redis-crash.sh), which also runs Redis's out-of-the-box setup: no AOF, snapshots only.
+    command: ["redis-server", "--appendonly", "${REDIS_APPENDONLY:-yes}", "--appendfsync", "${REDIS_APPENDFSYNC:-always}",
+              "--save", "${REDIS_SAVE:-}"]
     ports:
       - "127.0.0.1:6381:6379" # host 6381: 6379 and 6380 are taken by other projects' containers on this machine
     volumes:

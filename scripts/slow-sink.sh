@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Slow sink: freeze Meilisearch (docker pause) under write load and watch Driftless's memory and the WAL Postgres
-# holds for it; then unfreeze and reconcile. With backpressure (D-025), memory stays flat and the backlog waits in
-# Postgres's WAL instead.
+# Slow sink: freeze a sink (Meilisearch by default; Redis since T12) with docker pause under write load and watch
+# Driftless's memory and the WAL Postgres holds for it; then unfreeze and reconcile. With backpressure (D-025), memory
+# stays flat and the backlog waits in Postgres's WAL instead.
 #
-# Usage: scripts/slow-sink.sh [PAUSE_S=300] [RATE_TX_PER_S=200] [MAX_PENDING=50000]
+# Usage: scripts/slow-sink.sh [PAUSE_S=300] [RATE_TX_PER_S=200] [MAX_PENDING=50000] [SERVICE=meilisearch]
 # Exit code: reconcile's (0 = no drift, 1 = drift, 2 = couldn't check).
 set -euo pipefail
 export MSYS_NO_PATHCONV=1 # Git Bash: don't rewrite container paths
@@ -13,6 +13,7 @@ docker compose build -q connector # the image must hold the code on disk (T10.2)
 pause_s=${1:-300}
 rate=${2:-200}
 max=${3:-50000}
+service=${4:-meilisearch} # the sink to freeze: meilisearch or redis
 workload_log=$(mktemp)
 sql() { docker compose exec -T postgres psql -U driftless -d shop -tAc "$1"; }
 held_wal() { sql "SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) FROM pg_replication_slots WHERE slot_name = 'driftless_slot'"; }
@@ -25,14 +26,14 @@ scripts/workload.sh "$rate" $((pause_s + 60)) > "$workload_log" 2>&1 &
 workload=$!
 sleep 15
 echo "slow-sink: before the freeze: connector memory $(memory), WAL held for the slot $(held_wal)"
-docker compose pause meilisearch >/dev/null 2>&1
-echo "slow-sink: Meilisearch frozen for ${pause_s} s under ${rate} tx/s (cap: ${max} waiting changes)"
+docker compose pause "$service" >/dev/null 2>&1
+echo "slow-sink: $service frozen for ${pause_s} s under ${rate} tx/s (cap: ${max} waiting changes)"
 for ((t = 15; t <= pause_s; t += 15)); do
   sleep 15
   echo "  +${t} s: connector memory $(memory), WAL held for the slot $(held_wal)"
 done
-docker compose unpause meilisearch >/dev/null 2>&1
-echo "slow-sink: Meilisearch unfrozen"
+docker compose unpause "$service" >/dev/null 2>&1
+echo "slow-sink: $service unfrozen"
 
 wait "$workload"
 grep -E '^number of (transactions actually processed|failed transactions)' "$workload_log" | sed 's/^/  workload: /' || true
