@@ -4,7 +4,7 @@
 |---|---|
 | Found | 2026-10-22, T03, by reading `pg-logical-replication` 2.5.0's source *before* using it, then reproduced |
 | Severity | **silent data loss**, after a crash or restart, when two commit records sit next to each other in the WAL |
-| Status | fixed in Driftless (`sendStatus()` in `src/main.ts`); not reported upstream yet (owner's call) |
+| Status | fixed in Driftless (`sendStatus()` in `src/main.ts`). **Fixed upstream independently** in 2.6.0 (see "Upstream" below) |
 
 ## Expected
 
@@ -63,6 +63,23 @@ Both library auto-acks are off: `{ auto: false, timeoutSeconds: 0 }`.
 | library ack (repeat) | `09D699B8` | `09D699B8` | `09D699B9` | **no: lost** |
 
 Every run produced adjacent commit records, so the loss reproduces every time, not just occasionally.
+
+## Upstream (checked 2026-10-23, T11.5)
+
+Someone else hit the same `+ 1` from a different direction: PostgreSQL 18 failover slot sync skipped a fully
+caught-up standby because the acknowledged position was one byte past the WAL end.
+[kibae/pg-logical-replication#222](https://github.com/kibae/pg-logical-replication/pull/222) ("preserve WAL end
+positions in standby acknowledgements", merged 2026-10-14) removed the increment, released in **2.6.0**. So no
+report is needed; our finding and theirs agree on the cause.
+
+What that means for Driftless:
+- The dependency is **pinned to exactly `2.5.0`** (it was `^2.5.0`, which allows 2.6.0). Our `end − 1` compensation is
+  correct only for a library that adds 1. 2.6.0 is also younger than the 14-day rule (D-017) allows today.
+- `src/source/ack-contract.test.ts` checks the library's actual encoding (`acknowledge('0/9D68A47')` writes
+  `0/9D68A48`). After an upgrade to ≥ 2.6.0 it fails, and the fix is one line: `sendStatus` passes `end` unchanged.
+- With 2.6.0 and the old compensation, Driftless would confirm one byte short of each end. By our reading of the
+  skip rule above, that changes nothing that gets re-sent, but it's not the exact position the code promises, so the
+  test makes the upgrade a deliberate step.
 
 ## The interview version
 

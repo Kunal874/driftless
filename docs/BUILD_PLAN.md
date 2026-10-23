@@ -361,7 +361,8 @@ project better in every possible way"). Scope kept to what adds real value; the 
       stack (seed → backfill → SIGKILL chaos → reconcile = 0 → reconcile self-test) via `scripts/ci-e2e.sh`, which
       also runs locally
 - [ ] T11.4 README: CI badge, a Grafana screenshot from a real chaos run; `package.json` repository metadata
-- [ ] T11.5 Draft the BUG-001 report for `kibae/pg-logical-replication`; filing it is the owner's call
+- [x] T11.5 BUG-001 upstream: already fixed independently in 2.6.0 (#222), so no report is needed. Pinned to exactly
+      2.5.0 and added a contract test that fails if the library's +1 changes
 - [ ] T11.6 Verify, `learn/task-11-polish.md`, checkpoint; push only with the owner's go-ahead
 
 **Dependencies:** none new for the project. CI uses GitHub's own `actions/checkout@v4` and `actions/setup-node@v4`.
