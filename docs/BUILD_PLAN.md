@@ -399,7 +399,7 @@ value. Proven the way the index is: reconcile, connector crashes, and a crash of
       Compose service `redis` on `127.0.0.1:6381` (6379/6380 are taken), AOF `always`, its own volume. D-029.
 - [x] T12.2 Sink contract, no behavior change: `type Sink = { name, applyBatch, clear, isEmpty }`; main applies every
       batch to every sink; `driftless_write_seconds{sink}`; chaos → 0 drift
-- [ ] T12.3 `src/sinks/redis.ts` + unit tests (fake client): coalesced batch → one pipeline (`HSET`/`DEL`), retry
+- [x] T12.3 `src/sinks/redis.ts` + unit tests (fake client): coalesced batch → one pipeline (`HSET`/`DEL`), retry
       policy, clear by prefix, `isEmpty`
 - [ ] T12.4 Config: optional `redis: { url, keyPrefix }` (omit it = Meilisearch only); `REDIS_URL`, `REDIS_PASSWORD`
       (a secret: env only). Reconcile and its self-test cover Redis too
