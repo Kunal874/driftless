@@ -35,6 +35,18 @@ export async function readBackfillState(db: Client, stateTable: string, table: s
   return rows[0]?.value ?? null;
 }
 
+// Marks `table` as due for a backfill from the start. A requested round (DRIFTLESS_BACKFILL=1) marks every table at
+// once, so a round interrupted before it reaches a table still does that table when it resumes.
+export async function scheduleBackfill(db: Client, stateTable: string, table: string): Promise<BackfillState> {
+  const q = stateTable.split('.').map((part) => db.escapeIdentifier(part)).join('.');
+  const state: BackfillState = { status: 'running', after: null };
+  await db.query(
+    `INSERT INTO ${q} (name, value) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value`,
+    [stateName(table), JSON.stringify(state)],
+  );
+  return state;
+}
+
 // Before T13 there was one table and one progress row, named just 'backfill'. It belongs to the table that was
 // mirrored then, the first one in the config. Renamed once, so a finished backfill isn't redone and an
 // interrupted one resumes where it was.

@@ -448,7 +448,7 @@ products-only mix stays exactly as it is (D-016), so earlier numbers stay compar
       picks the mix with `WORKLOAD_MIX=multi`; the default is unchanged)
 - [x] T13.2 Config list + validation; publication kept equal to the config; unknown tables skipped; unit tests
 - [x] T13.3 Routing, dispatch and sinks per mapping (index and key prefix per table); a cross-table transaction test
-- [ ] T13.4 Backfill per table (saved progress, namespaced marks, migration of the old row); unit tests;
+- [x] T13.4 Backfill per table (saved progress, namespaced marks, migration of the old row); unit tests;
       `backfill-race.sh` with two tables
 - [ ] T13.5 Reconcile per table; proofs → RESULTS §13: chaos with the `multi` mix → 0 drift in both tables × both sinks;
       add a table to a running deployment's config → it backfills; remove one → its changes are ignored. CI e2e with

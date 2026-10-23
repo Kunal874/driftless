@@ -35,6 +35,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-027 | Keep 8 lanes by default; 1 lane is the low-lag setting for Meilisearch | Accepted | T09 |
 | D-028 | Config file for what/where, env for secrets and tuning; check it before creating anything | Accepted | T10 |
 | D-029 | Redis as a second sink: hashes, both-or-nothing, durable acknowledgements, readers never write | Accepted | T12 |
+| D-030 | Several tables per instance: one mirror per table, one stream, per-table backfill rounds | Accepted | T13 |
 
 ---
 
@@ -380,3 +381,28 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 - **Consequences:** every write now waits for the slower of two systems (Meilisearch, in practice). Redis down = the
   pipeline waits (backpressure), like Meilisearch down. Redis is optional: without a `redis` section in the config,
   Driftless runs with Meilisearch only.
+
+### D-030 — Several tables per instance: one mirror per table, one stream, per-table backfill rounds
+- **Decision:** `sync` is a list of mappings (a single object is still accepted). Each table gets a *mirror*: its own
+  index, its own Redis key prefix (default `<index>:`; no prefix may start another) and its own backfill. All tables
+  share one slot, one publication, one stream, one set of lanes and one checkpointer.
+- **Routing:** lanes are keyed by `table:id`, so per-row order holds and equal ids in different tables don't wait for
+  each other. A lane batch may mix tables; each table's share goes to that table's sinks, in parallel.
+- **Transactions across tables need nothing new:** the checkpointer counts a transaction's changes wherever they're
+  applied, so a transaction that changes a product and a customer is confirmed only when both are applied in every
+  sink.
+- **The publication equals the config:** setup adds new tables and drops removed ones. A removed table's changes can
+  still be in the slot's WAL; dispatch skips them (logged once) instead of failing.
+- **TRUNCATE** clears only the truncated, mirrored tables, behind the usual barrier.
+- **Backfill:** one table at a time, in config order. Progress is saved per table (`backfill:<table>`); the pre-T13 row
+  `backfill` is renamed once to the first table's name. Watermark marks carry random ids, so only the backfill that
+  wrote a mark can match it, and there's no need to put the table in the mark.
+- **Rounds (found while testing T13.4):** "resume beats request" (D-024) now applies across tables. If any table's
+  backfill is `running`, a start continues that round, and `DRIFTLESS_BACKFILL=1` doesn't restart tables the round
+  already finished. Otherwise a connector killed mid-round would redo the first table forever. And a requested round
+  marks *every* table as due before it starts, so the request survives a restart.
+- **Why one instance for several tables, not one instance per table:** one slot means one WAL position to hold and
+  confirm, and transactions that span tables are confirmed atomically. With one instance per table, each would need
+  its own slot (each holding WAL), and a cross-table transaction would be confirmed in pieces.
+- **Limits:** every mirrored table lives in the same database; single-column primary keys; plain lower-case names.
+  Changing a table's column filter needs a forced backfill to rewrite its documents.

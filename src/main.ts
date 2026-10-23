@@ -12,7 +12,7 @@ import { createClient } from '@redis/client';
 import { redisSink, type RedisClient } from './sinks/redis.ts';
 import { createLanes } from './pipeline/lanes.ts';
 import { Checkpointer } from './pipeline/checkpointer.ts';
-import { createBackfill, migrateBackfillState, readBackfillState } from './source/backfill.ts';
+import { createBackfill, migrateBackfillState, readBackfillState, scheduleBackfill } from './source/backfill.ts';
 import type { MappingConfig } from './config.ts';
 import { nextReadState } from './pipeline/backpressure.ts';
 import { batchSize, changesApplied, gaugeOf, lag, serveMetrics, writeSeconds } from './metrics.ts';
@@ -290,23 +290,32 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 service.once('start', () => void maybeBackfill().catch(fail));
 
 // One table at a time (T13), in config order. Each table's progress is saved under its own name.
+// Resume beats request (D-024), across tables: if any table's backfill was interrupted, this start continues that
+// round, and DRIFTLESS_BACKFILL=1 doesn't restart the tables it already finished (a connector restarted mid-round would
+// otherwise redo them again and again). A requested round marks every table as due before it starts, so the request
+// survives a restart too.
 async function maybeBackfill(): Promise<void> {
   const reader = new pg.Client(config.pgConfig);
   await reader.connect();
+  const states = new Map<Mirror, Awaited<ReturnType<typeof readBackfillState>>>();
+  for (const mirror of mirrors.values()) states.set(mirror, await readBackfillState(reader, config.stateTable, mirror.mapping.table));
+  const continuing = [...states.values()].some((state) => state?.status === 'running');
+  if (config.backfill.enabled && !continuing) {
+    for (const mirror of mirrors.values()) {
+      states.set(mirror, await scheduleBackfill(reader, config.stateTable, mirror.mapping.table)); // asked for
+    }
+  }
   let ran = 0;
-  for (const mirror of mirrors.values()) if (await backfillTable(reader, mirror)) ran++;
+  for (const [mirror, state] of states) if (await backfillTable(reader, mirror, state)) ran++;
   await reader.end();
   if (ran > 0) console.log(`backfill: every table is backfilled (${ran} of ${mirrors.size} needed it)`);
 }
 
-async function backfillTable(reader: pg.Client, mirror: Mirror): Promise<boolean> {
+async function backfillTable(reader: pg.Client, mirror: Mirror, state: Awaited<ReturnType<typeof readBackfillState>>): Promise<boolean> {
   const { table } = mirror.mapping;
-  const state = await readBackfillState(reader, config.stateTable, table);
   let from: string | null | undefined; // undefined = no backfill this time
   if (state?.status === 'running') {
-    from = state.after; // an earlier backfill was interrupted: resume after the last applied chunk
-  } else if (config.backfill.enabled) {
-    from = null; // asked for: DRIFTLESS_BACKFILL=1
+    from = state.after; // due: interrupted (resume after the last applied chunk) or asked for (from the start)
   } else {
     const { rows: [{ has_rows }] } = await reader.query(`SELECT EXISTS (SELECT 1 FROM ${table}) AS has_rows`);
     // Any empty sink for a table with rows: a first start, a deleted index, or a sink just switched on (e.g. Redis).
