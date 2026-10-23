@@ -5,16 +5,18 @@ describes *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T12 — Redis cache as a second sink** (tag `checkpoint/T12`); release `v0.1.0` = T10
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). T11 is pushed with CI green. **T12 is committed
-  locally, not pushed** (push only with the owner's go-ahead).
-- Next step: **T13**: multiple tables per instance (BUILD_PLAN → T13, approved by the owner 2026-10-23).
-- Throwaway compose projects used in T12 (`driftless-redis`, `driftless-ci`) are removed, volumes included.
+- Last checkpoint: **T13 — Multiple tables per instance** (tag `checkpoint/T13`); release `v0.1.0` = T10
+- Published: **https://github.com/Kunal874/driftless** (public, MIT). T12 is pushed with CI green (run 39942643996).
+  **T13 is committed locally, not pushed.**
+- Next step: the owner's go-ahead to push T13 and release `v0.2.0` (version bump + tag, BUILD_PLAN T13.6). Nothing else
+  is planned; new work needs a plan the owner approves.
+- Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
 
-- `products`: 287,476 rows; Meilisearch `products` and Redis `product:*`: **identical** (last reconcile 0 / 0 / 0 in
-  both, after the T12.5 runs).
+- `products`: 289,886 rows and `customers`: 20,517 rows; their indexes (`products`, `customers`) and Redis keys
+  (`product:*`, `customer:*`) are **identical** to them (last reconcile 0 / 0 / 0 everywhere, after the T13.5 runs).
+- The shipped config mirrors both tables; the publication holds products, customers and the watermark table.
 - Redis 8.10.1 on 127.0.0.1:6381, AOF `appendfsync always`, volume `driftless_redisdata`.
 - Slot `driftless_slot` caught up. Postgres runs with `max_slot_wal_keep_size=1GB`.
 - `postgres`, `meilisearch`, `redis` and `connector` are **running**; `prometheus` and `grafana` are stopped.
@@ -45,25 +47,33 @@ describes *now*; history lives in git.
   - Reconcile and its self-test cover both sinks; CI therefore checks Redis on every push.
   - Proofs (RESULTS §12): backfill of 279,652 rows; chaos and a 2-min Redis freeze at 0 drift; a Redis SIGKILL at
     0 drift with `always`, against 6,238 wrong keys with Redis's default persistence; ~+0.15 s of lag.
-  - `npm test` 63/63.
+- **T13 ✅** Several tables per instance (D-030):
+  - `sync` is a list; one mirror per table (index, key prefix, backfill); lanes keyed by `table:id`; the publication
+    is kept equal to the config; removed tables' leftover changes are skipped.
+  - Backfill per table with saved progress per table (old row migrated); "resume beats request" across tables, found
+    while preparing the race test (a forced round would have restarted finished tables after every kill).
+  - Demo: `customers` table + seed, `WORKLOAD_MIX=multi` with cross-table transactions; CI runs two tables.
+  - Proofs (RESULTS §13): add, remove, re-add a table; a two-table backfill race with 7 SIGKILLs; chaos with
+    cross-table transactions (11 SIGKILLs); all 0 drift. `npm test` 69/69.
 
 ## Ideas, if the owner wants more (none started)
 
-- Schema-change handling (`ALTER TABLE` is untested). Multiple tables are planned as T13.
+- Schema-change handling (`ALTER TABLE` is untested).
 - D-027 (lanes) was written for Meilisearch alone; with Redis (fast) beside it, Meilisearch still sets the pace, so it
   stands. Re-measure if a faster search sink ever replaces it.
 - Upgrade `pg-logical-replication` to ≥ 2.6.0 once it passes the 14-day rule (2026-10-28): change `sendStatus` to
   pass `end` unchanged in the same commit; `ack-contract.test.ts` will demand it (BUG-001 → Upstream).
 
-## Files changed in T12
+## Files changed in T13
 
-`src/sinks/sink.ts` (new), `src/sinks/redis.ts` (+ test, new), `src/sinks/meilisearch.ts` (Sink, `isEmpty`),
-`src/main.ts` (all sinks, Redis client, backfill on any empty sink), `src/metrics.ts` (`sink` label), `src/config.ts` +
-`src/config-file.ts` (+ test) (`redis` section), `driftless.config.json` (Redis on), `scripts/reconcile.ts` (targets),
-`scripts/redis-crash.sh` (new), `scripts/slow-sink.sh` (service argument), `scripts/bench-lag.ts` (per-sink writes),
-`docker-compose.yml` (redis service), `docker/grafana/dashboards/driftless.json` (write panel per sink), `package.json`
-(@redis/client 6.3.0), `docs/` (DECISIONS D-029, RESULTS §12, ARCHITECTURE, BUILD_PLAN, TEST_CHECKLIST), `README.md`,
-`AGENTS.md`, `learn/task-12-redis.md`
+`src/config-file.ts` (+ test) (list, prefixes, uniqueness), `src/config.ts` (`mappings`), `src/main.ts` (mirrors,
+routing, per-table backfill rounds), `src/pipeline/lanes.ts` (+ test) (`table:id`), `src/source/backfill.ts` (+ test)
+(per-table progress, migration, `scheduleBackfill`), `src/source/replication.ts` (publication sync, recovery text),
+`src/metrics.ts` (`table` label), `scripts/reconcile.ts` (per table), `scripts/workload.sh` (`WORKLOAD_MIX`),
+`scripts/backfill-race.sh`, `scripts/ci-e2e.sh`, `scripts/redis-crash.sh`, `db/init/02-customers.sql`,
+`db/seed-customers.sql`, `db/workload/customer_*.sql` + `cross_table.sql` (new), `driftless.config.json` (two tables),
+`docs/` (DECISIONS D-030, RESULTS §13, ARCHITECTURE, FLOW 5, ROLLBACK, BUILD_PLAN, TEST_CHECKLIST), `README.md`,
+`AGENTS.md`, `learn/task-13-multi-table.md`
 
 ## Environment (verified 2026-10-23)
 

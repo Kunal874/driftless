@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T12 — Redis cache as a second sink** (tag `checkpoint/T12`; release tag `v0.1.0` is T10) |
-| Next step | **T13.1**: second table + `multi` workload (docs/BUILD_PLAN.md → T13). T12 isn't pushed yet (owner's go-ahead) |
+| Last checkpoint | **T13 — Multiple tables per instance** (tag `checkpoint/T13`; release tag `v0.1.0` is T10) |
+| Next step | owner's go-ahead to push T13 and release `v0.2.0`; then nothing planned. New work starts with a plan the owner approves |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

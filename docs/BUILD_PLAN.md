@@ -68,7 +68,7 @@ atomicity inside the index. High availability (stretch S2).
 | T10 | Config, packaging, README, release | 6 | ✅ |
 | T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
 | T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | ✅ |
-| T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | 🔨 |
+| T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | ✅ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -421,7 +421,7 @@ which runs had Redis on.
 
 ---
 
-## T13 — Multiple tables per instance 🔨 (approved by the owner 2026-10-23)
+## T13 — Multiple tables per instance ✅ (approved by the owner 2026-10-23)
 
 **Goal:** one Driftless mirrors several tables, each into its own index and Redis prefix, with the same guarantees,
 including transactions that touch several tables at once.
@@ -453,7 +453,7 @@ products-only mix stays exactly as it is (D-016), so earlier numbers stay compar
 - [x] T13.5 Reconcile per table; proofs → RESULTS §13: chaos with the `multi` mix → 0 drift in both tables × both sinks;
       add a table to a running deployment's config → it backfills; remove one → its changes are ignored. CI e2e with
       two tables
-- [ ] T13.6 Docs (README config and limitations, ARCHITECTURE, FLOW), `learn/task-13-multi-table.md`, checkpoint;
+- [x] T13.6 Docs (README config and limitations, ARCHITECTURE, FLOW), `learn/task-13-multi-table.md`, checkpoint;
       release `v0.2.0` (push and tag only with the owner's go-ahead)
 
 **Dependencies:** none new.

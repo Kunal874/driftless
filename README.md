@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Kunal874/driftless/actions/workflows/ci.yml/badge.svg)](https://github.com/Kunal874/driftless/actions/workflows/ci.yml)
 
-**Keeps a Meilisearch index and a Redis cache in sync with a Postgres table by reading the database's write-ahead
+**Keeps Meilisearch indexes and a Redis cache in sync with Postgres tables by reading the database's write-ahead
 log, and proves they never drift apart, even when the sync process (or Redis itself) is killed mid-write.**
 
 The usual way to keep search in sync is a *dual write*: the app saves to Postgres, then also updates the search index.
@@ -27,11 +27,13 @@ versions and machine (Windows 11, Docker Desktop, 28 CPUs / 7.6 GiB visible to D
 | **Backfill while the table is being written** | 0 drift in **10 / 10** races (≈105 race windows each), using DBLog-style watermarks. [§5](docs/RESULTS.md#5-backfill-under-load-t07) |
 | **Meilisearch down for 5 minutes** at 600 tx/s | memory stayed bounded (backpressure; uncapped it grew 45 → 220 MiB and kept rising), connection kept alive, 0 drift after. [§6](docs/RESULTS.md#6-slow-sink-meilisearch-frozen-under-load-t08) |
 | **Driftless down for too long** | Postgres gives up the slot at a 1 GB WAL cap instead of filling its disk; Driftless refuses to run on a lost slot and prints the recovery steps; recovery tested at 0 drift. [§7](docs/RESULTS.md#7-wal-safety-a-dead-driftless-cant-fill-the-disk-t08) |
+| **Several tables, one stream** | Two tables (290k + 20k rows) × two sinks stayed exact through **11 SIGKILLs** under transactions that change both tables at once, a backfill race with **7 SIGKILLs** (it resumed, never restarted), and adding, removing and re-adding a table on a running deployment. [§13](docs/RESULTS.md#13-several-tables-per-instance-t13) |
 | **Redis cache, never stale** | 0 drift in the cache under connector SIGKILLs, a 2-minute Redis freeze, and a **SIGKILL of Redis itself**. With Redis's default persistence, the same crash left **6,238 wrong keys** (4,143 rolled back to older values), which is why Driftless runs it with `appendfsync always`. Cost: ~0.15 s of lag at 1,000 tx/s. [§12](docs/RESULTS.md#12-the-redis-cache-as-a-second-sink-t12) |
 
 **Every push re-proves the main claim.** CI type-checks, runs the unit tests, then starts the real stack on the
-runner: it seeds 20,000 rows, lets Driftless backfill the index and the cache, SIGKILLs the connector about every 10 s
-under 200 tx/s of writes, and fails unless reconcile finds 0 drift in both ([`scripts/ci-e2e.sh`](scripts/ci-e2e.sh)).
+runner: it seeds two tables, lets Driftless backfill both indexes and the cache, SIGKILLs the connector about every
+10 s under 200 tx/s of writes (cross-table transactions included), and fails unless reconcile finds 0 drift in every
+table and sink ([`scripts/ci-e2e.sh`](scripts/ci-e2e.sh)).
 
 ![Grafana during a crash test](docs/images/dashboard-chaos.png)
 
@@ -103,14 +105,18 @@ credentials:
 docker compose up -d --wait
 ```
 
-Create 100,000 demo products (on Windows Git Bash, put `MSYS_NO_PATHCONV=1 ` in front):
+Create 100,000 demo products and 20,000 customers (on Windows Git Bash, put `MSYS_NO_PATHCONV=1 ` in front):
 
 ```bash
 docker compose exec -T postgres psql -U driftless -d shop -f /db/seed.sql
 ```
 
-Start Driftless. It sees an empty index and cache, copies the existing rows into both (backfill), then streams new
-changes:
+```bash
+docker compose exec -T postgres psql -U driftless -d shop -f /db/seed-customers.sql
+```
+
+Start Driftless. It mirrors both tables (as configured): it sees empty indexes and an empty cache, copies the
+existing rows (backfill, one table at a time), then streams new changes:
 
 ```bash
 docker compose --profile connector up -d --build connector
@@ -120,11 +126,11 @@ docker compose --profile connector up -d --build connector
 docker compose logs -f connector
 ```
 
-Write to Postgres (a random mix of updates, inserts and deletes at 200 tx/s for 30 s), then check every row against
-its document and its cache entry:
+Write to Postgres (a random mix of updates, inserts and deletes on both tables, some transactions changing a product
+and a customer together, at 200 tx/s for 30 s), then check every row against its document and its cache entry:
 
 ```bash
-scripts/workload.sh 200 30
+WORKLOAD_MIX=multi scripts/workload.sh 200 30
 ```
 
 ```bash
@@ -164,22 +170,23 @@ to):
 {
   "postgres": { "host": "127.0.0.1", "port": 5440, "user": "driftless", "database": "shop" },
   "meilisearch": { "host": "http://127.0.0.1:7700" },
-  "sync": {
-    "table": "public.products",
-    "index": "products",
-    "primaryKey": "id",
-    "columns": { "exclude": ["description"] }
-  },
-  "redis": { "url": "redis://127.0.0.1:6381", "keyPrefix": "product:" }
+  "sync": [
+    { "table": "public.products", "index": "products", "primaryKey": "id", "redisKeyPrefix": "product:",
+      "columns": { "exclude": ["description"] } },
+    { "table": "public.customers", "index": "customers", "primaryKey": "id", "redisKeyPrefix": "customer:" }
+  ],
+  "redis": { "url": "redis://127.0.0.1:6381" }
 }
 ```
 
-`columns` is optional: `include` (a list that must contain the primary key) or `exclude`; without it, every column
-becomes a document field (and a cache field). `redis` is optional too: without it, Driftless keeps only the index.
-Switching it on for an existing table fills the cache by itself (a backfill starts when any sink is empty). The file is
-validated in full at start, every problem reported at once. Then it's checked against the real table (the primary key
-must match, named columns must exist) before anything is created. Secrets are refused in the file, including a
-password inside the Redis URL: they come from environment variables.
+`sync` lists the tables to mirror, each into its own index and Redis key prefix (a single object works too). Adding
+a table to a running deployment backfills just that table; removing one stops mirroring it. `columns` is optional:
+`include` (a list that must contain the primary key) or `exclude`; without it, every column becomes a document field
+(and a cache field). `redis` is optional too: without it, Driftless keeps only the indexes. Switching it on fills the
+cache by itself (a backfill starts for any table with an empty sink). The file is validated in full at start, every
+problem reported at once (including duplicate tables, indexes or overlapping key prefixes). Then it's checked against
+the real tables (primary keys must match, named columns must exist) before anything is created. Secrets are refused
+in the file, including a password inside the Redis URL: they come from environment variables.
 
 **Environment variables** override the file or tune the pipeline:
 
@@ -241,7 +248,8 @@ and config validation. The claims are proven by scripts against the real stack:
 
 ## Limitations
 
-- One table → one index per Driftless instance; single-column primary keys; plain lower-case table names.
+- Several tables per instance, all from one database (one slot); single-column primary keys; plain lower-case table
+  names. Changing a table's column filter needs a forced backfill to rewrite its documents.
 - Two sinks: Meilisearch and Redis (each one module behind `src/sinks/sink.ts`). Every write waits for the slower one,
   which is Meilisearch.
 - Schema changes (`ALTER TABLE`) are untested. A dropped column's old values would stay in documents until each row is

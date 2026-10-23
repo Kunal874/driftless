@@ -21,7 +21,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
                         │ replication protocol, pgoutput plugin (proto v1)
                         ▼
  ┌──────────────── Driftless (one Node.js process) ─────────────────────────────┐
- │ stream ─► decode ─► router: hash(pk) % N ─► lanes 0..N-1 (ordered, bounded)  │
+ │ stream ─► decode ─► router: hash(table:pk) % N ─► lanes 0..N-1 (ordered)     │
  │                                                  │ natural batch ≤ 5000      │
  │                                                  ▼                           │
  │ checkpointer ◄── "txn X applied" ◄── sinks, in parallel: Meilisearch + Redis │
@@ -33,7 +33,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
  └────────────────────┬──────────────────────────────────────┬──────────────────┘
                       │ HTTP: documents + tasks API (7700)   │ RESP3, MULTI per batch (6381)
                       ▼                                      ▼
-           Meilisearch index "products"         Redis hashes "product:{id}" (T12)
+      one index per table (products, …)        one key prefix per table (product:, …)
 ```
 
 ## Invariants (never break these, not even to make a test pass)
@@ -59,15 +59,16 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Document mapping | row → search document (shared with reconcile) | `src/sinks/document.ts` | T04 | ✅ |
 | Meilisearch sink | per lane batch: `coalesce` → ≤ 2 parallel writes (upserts, deletes), each waited to `succeeded`; `clear()` for TRUNCATE; retry policy D-021 | `src/sinks/meilisearch.ts` | T04, T06 | ✅ |
 | Sink contract | `{ name, applyBatch, clear, isEmpty }`; every batch goes to every sink in parallel, applied only when all have it; a backfill starts when any sink is empty (D-029) | `src/sinks/sink.ts`, `src/main.ts` | T12 | ✅ |
+| Mirrors | one per configured table: its sinks (its index, its cache prefix) and its backfill; dispatch routes by table, skips tables no longer configured; TRUNCATE clears only the truncated tables; the publication is kept equal to the config (D-030) | `src/main.ts`, `src/source/replication.ts` | T13 | ✅ |
 | Redis sink | one hash per row (`product:{id}`, JSON-encoded fields); the same `coalesce`; one MULTI per batch (`DEL` + `HSET` of sent fields); D-021 retries; `clear()` = `SCAN` + `UNLINK` on the prefix; Redis with AOF `appendfsync always` | `src/sinks/redis.ts`, `docker-compose.yml` | T12 | ✅ |
 | Reconcile + chaos | prove zero drift under crashes (self-testing checker; random SIGKILLs under load) | `scripts/reconcile.ts`, `scripts/chaos.sh` | T05 | ✅ |
-| Router, lanes, batcher | FNV-1a routing, ordered lanes, natural batching ≤ batchMax (D-022) | `src/pipeline/lanes.ts` | T06 | ✅ |
+| Router, lanes, batcher | FNV-1a routing on `table:pk` (T13), ordered lanes, natural batching ≤ batchMax (D-022) | `src/pipeline/lanes.ts` | T06 | ✅ |
 | Checkpointer | safe LSN = end of the unbroken run of applied transactions | `src/pipeline/checkpointer.ts` | T06 | ✅ |
-| Backfill | snapshot existing rows between watermarks, column-aware; progress saved + resumed (D-023, D-024, BUG-002/003) | `src/source/backfill.ts` | T07 | ✅ |
+| Backfill | snapshot existing rows between watermarks, column-aware; progress saved + resumed per table, one table at a time; resume beats request across tables (D-023, D-024, D-030, BUG-002/003) | `src/source/backfill.ts` | T07 | ✅ |
 | Backpressure | pause the replication socket at the pending cap, resume at half; 10 s status re-send (D-025) | `src/pipeline/backpressure.ts`, `src/main.ts` | T08 | ✅ |
 | WAL safety | slot WAL capped at 1 GB (compose); refuse to start on a lost slot (D-026) | `docker-compose.yml`, `src/source/replication.ts` | T08 | ✅ |
 | Metrics | `GET /metrics` (prom-client, port 9464): lag + write-time + batch-size histograms, changes by op, queue gauges read at scrape time, slot retained WAL; Prometheus + Grafana (profile `metrics`, dashboard provisioned) | `src/metrics.ts`, `docker/` | T09 | ✅ |
-| Config | `driftless.config.json`: connection (no secrets), table → index, primary key, column include/exclude; validated in full at start (`parseConfig`), then checked against the real table before anything is created (`checkSync`); env vars override (D-028) | `src/config-file.ts`, `src/config.ts`, `src/source/replication.ts` | T10 | ✅ |
+| Config | `driftless.config.json`: connection (no secrets), one or several mappings (table → index, primary key, column include/exclude, Redis key prefix; T13); validated in full at start (`parseConfig`), then checked against the real table before anything is created (`checkSync`); env vars override (D-028) | `src/config-file.ts`, `src/config.ts`, `src/source/replication.ts` | T10 | ✅ |
 
 If the code is split differently later, update this table.
 
