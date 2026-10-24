@@ -12,7 +12,8 @@ describe('lsn', () => {
     for (const lsn of ['0/0', '0/FFFFFFFF', '1/0', 'FFFFFFFF/FFFFFFFF']) {
       expect(bigIntToLsn(lsnToBigInt(lsn))).toBe(lsn);
     }
-    // end − 1 (the BUG-001 compensation) must borrow from the high half correctly
+    // subtracting across the 32-bit boundary must borrow from the high half (used by the BUG-001 repro, and by the
+    // compensation Driftless needed with pg-logical-replication 2.5.0)
     expect(bigIntToLsn(lsnToBigInt('1/0') - 1n)).toBe('0/FFFFFFFF');
   });
 

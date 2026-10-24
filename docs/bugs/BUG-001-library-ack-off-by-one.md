@@ -4,7 +4,7 @@
 |---|---|
 | Found | 2026-10-22, T03, by reading `pg-logical-replication` 2.5.0's source *before* using it, then reproduced |
 | Severity | **silent data loss**, after a crash or restart, when two commit records sit next to each other in the WAL |
-| Status | fixed in Driftless (`sendStatus()` in `src/main.ts`). **Fixed upstream independently** in 2.6.0 (see "Upstream" below) |
+| Status | **Fixed upstream** in 2.6.0 (found independently, see "Upstream"); Driftless upgraded on 2026-10-24 and dropped its compensation |
 
 ## Expected
 
@@ -32,13 +32,15 @@ The same file has two dangerous defaults (not bugs, but each loses data if left 
 ## Steps to reproduce
 
 ```bash
-node scripts/repro-ack-off-by-one.ts        # library-style ack
-node scripts/repro-ack-off-by-one.ts fixed  # Driftless's ack
+node scripts/repro-ack-off-by-one.ts        # confirm end + 1, as 2.5.0 did
+node scripts/repro-ack-off-by-one.ts fixed  # confirm exactly the end, as Driftless does
 ```
 
-Driftless must be stopped. The script uses test data only:
+Driftless must be stopped. Its two test updates are consumed by the script, not by Driftless, so afterwards re-touch
+those two rows (or the index and cache keep their old values; reconcile shows them). The script:
 1. Skip the slot to the current WAL position.
-2. Two sessions each update a row, then commit back to back, which produces adjacent commit records.
+2. Two sessions each update an existing row (the two lowest ids), then commit back to back, which produces adjacent
+   commit records.
 3. Stream both, acknowledge only T1, stop.
 4. `pg_logical_slot_peek_binary_changes(...)` lists what Postgres would re-send after a restart.
 
@@ -51,8 +53,9 @@ commit record that starts exactly at `end` on the wrong side of that line.
 ## Fix
 
 Driftless always confirms an **end** position (a commit's `commitEndLsn`, or a keepalive's position when
-idle) and compensates in one place: `service.acknowledge(end − 1)`, so Postgres receives exactly `end`.
-Both library auto-acks are off: `{ auto: false, timeoutSeconds: 0 }`.
+idle). With 2.5.0 it compensated in one place, `service.acknowledge(end − 1)`, so Postgres received exactly
+`end`. Since the upgrade to 2.6.0 (2026-10-24) the library sends the position unchanged, and `sendStatus` passes
+`end` as it is. Both library auto-acks stay off: `{ auto: false, timeoutSeconds: 0 }`.
 
 ## Proof (2026-10-22)
 
@@ -80,6 +83,19 @@ What that means for Driftless:
 - With 2.6.0 and the old compensation, Driftless would confirm one byte short of each end. By our reading of the
   skip rule above, that changes nothing that gets re-sent, but it's not the exact position the code promises, so the
   test makes the upgrade a deliberate step.
+
+### The upgrade (2026-10-24)
+
+Done as a recorded exception to the 14-day rule (D-017), after diffing the whole package and checking that the
+lockfile's hash equals the reviewed tarball's. The contract test failed against 2.6.0 exactly as designed (the library
+wrote `0/9D68A47` unchanged), then `sendStatus` and the test changed together. Checked live:
+- idle, the slot's confirmed position equals the current WAL position: a gap of 0 bytes;
+- the repro, now on 2.6.0 (it adds the 1 itself to show the old behavior), with adjacent commit records:
+
+| Mode | T1 end | T2 commit starts at | Slot confirmed at | T2 re-sent after restart? |
+|---|---|---|---|---|
+| fixed (what Driftless does now) | `BC70A838` | `BC70A838` | `BC70A838` | yes |
+| as 2.5.0 did (end + 1) | `BC70AA98` | `BC70AA98` | `BC70AA99` | **no: lost** |
 
 ## The interview version
 

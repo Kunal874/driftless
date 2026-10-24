@@ -10,7 +10,7 @@ run, with its command, date, versions and machine (CONSTRAINTS rule 7). Unmeasur
 | Host | Windows 11, Docker Desktop 4.83.0 (engine 29.6.2); the engine sees 28 CPUs and ~7.6 GiB RAM |
 | Not a quiet machine | other projects' containers ran at the same time (online-judge-v2, reachinbox-scheduler) |
 | Postgres / Meilisearch / Redis | 17.11 / 1.54.3 / 8.10.1 since T12 (pinned, D-010) |
-| Driftless | Node 24.18.0 (`node:24.18.0-alpine` in the `connector` service), pg-logical-replication 2.5.0, meilisearch-js 0.62.0, @redis/client 6.3.0 (T12) |
+| Driftless | Node 24.18.0 (`node:24.18.0-alpine` in the `connector` service), pg-logical-replication 2.5.0 (2.6.0 from 2026-10-24, D-017 exception), meilisearch-js 0.62.0, @redis/client 6.3.0 (T12) |
 | Metrics (T09) | prom-client 15.1.3; Prometheus 3.15.0 and Grafana 13.2.3 (profile `metrics`, not in the measured path) |
 | Data | `db/seed.sql` 100,000 rows (deterministic, D-016), workload mix 60/20/10/10 (`scripts/workload.sh`) |
 
@@ -271,6 +271,10 @@ is when speed matters. `DRIFTLESS_LANES=1` is the low-lag setting for Meilisearc
 | Dashboard screenshot run | `scripts/chaos.sh 240 30 300` with Prometheus + Grafana up | 7 kills, 0 failed transactions (count not captured); 279,180 = 279,180, **0 / 0 / 0**; image: `docs/images/dashboard-chaos.png` |
 | **CI on GitHub**, first run | push of `6b67aaa` → Actions run 39935636390 (ubuntu-24.04) | unit 13 s; e2e 2 min 45 s: backfill 20,000 rows in 1.8 s; 24,057 transactions, **11 SIGKILLs**; 20,239 = 20,239, **0 / 0 / 0**; self-test passed |
 | BUG-001 contract | `npm test` (`ack-contract.test.ts`) | library 2.5.0 writes position + 1, as the compensation assumes |
+| Upgrade to pg-logical-replication 2.6.0 (2026-10-24) | the old contract test against 2.6.0, then the new one | old test **failed as designed** (2.6.0 writes `0/9D68A47` unchanged); new tests pass; lockfile hash = the reviewed tarball's hash |
+| Confirm position on 2.6.0, idle | slot `confirmed_flush_lsn` vs `pg_current_wal_lsn()` | **gap 0 bytes** (3 samples) |
+| BUG-001 repro on 2.6.0 | `node scripts/repro-ack-off-by-one.ts fixed`, then without `fixed` | adjacent commits: confirm the exact end → T2 re-sent; end + 1 (as 2.5.0) → T2 lost |
+| Crash test on 2.6.0 | `WORKLOAD_MIX=multi scripts/chaos.sh 120 15 200` | 23,970 transactions, 7 SIGKILLs; 290,938 + 20,935 rows, both sinks, **0 / 0 / 0** |
 
 ## 12. The Redis cache as a second sink (T12)
 

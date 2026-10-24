@@ -1,10 +1,11 @@
-// Reproduces docs/bugs/BUG-001: pg-logical-replication's acknowledge(lsn) reports lsn + 1 to Postgres.
+// Reproduces docs/bugs/BUG-001: pg-logical-replication 2.5.0's acknowledge(lsn) reported lsn + 1 to Postgres.
 // Acking a commit's END position that way confirms one byte too far, so a transaction whose commit
 // record starts exactly there is skipped after a restart, i.e. silently lost.
+// Since 2.6.0 the library sends the position unchanged, so this script adds the 1 itself to show the old behavior.
 //
 // Usage (Driftless must be stopped; uses test data only):
-//   node scripts/repro-ack-off-by-one.ts           ack the way the library's own auto mode does
-//   node scripts/repro-ack-off-by-one.ts fixed     ack end − 1, so Postgres receives exactly the end
+//   node scripts/repro-ack-off-by-one.ts           confirm end + 1, as 2.5.0 did: the bug
+//   node scripts/repro-ack-off-by-one.ts fixed     confirm exactly the end, as Driftless does
 import pg from 'pg';
 import { LogicalReplicationService, PgoutputPlugin, type Pgoutput } from 'pg-logical-replication';
 import * as config from '../src/config.ts';
@@ -17,15 +18,17 @@ await db.connect();
 // 1. Start from a clean position: skip whatever test changes the slot still holds.
 await db.query('SELECT pg_replication_slot_advance($1, pg_current_wal_lsn())', [config.slot]);
 
-// 2. Two transactions with adjacent commit records: both write first, then commit back to back.
+// 2. Two transactions with adjacent commit records: both write first, then commit back to back. On two rows that
+// exist: an UPDATE matching nothing is an empty transaction, which Postgres doesn't stream at all.
+const { rows: [r1, r2] } = await db.query<{ id: string }>('SELECT id FROM products ORDER BY id LIMIT 2');
 const a = new pg.Client(config.pgConfig);
 const b = new pg.Client(config.pgConfig);
 await a.connect();
 await b.connect();
 await a.query('BEGIN');
-await a.query('UPDATE products SET stock = stock + 1 WHERE id = 3');
+await a.query('UPDATE products SET stock = stock + 1 WHERE id = $1', [r1!.id]);
 await b.query('BEGIN');
-await b.query('UPDATE products SET stock = stock + 1 WHERE id = 4');
+await b.query('UPDATE products SET stock = stock + 1 WHERE id = $1', [r2!.id]);
 await a.query('COMMIT');
 await b.query('COMMIT');
 await a.end();
@@ -48,7 +51,7 @@ await new Promise<void>((resolve, reject) => {
   service.subscribe(new PgoutputPlugin({ protoVersion: 1, publicationNames: [config.publication] }), config.slot).catch(reject);
 });
 const [t1, t2] = commits as [Commit, Commit];
-const arg = fixed ? bigIntToLsn(lsnToBigInt(t1.commitEndLsn) - 1n) : t1.commitEndLsn;
+const arg = fixed ? t1.commitEndLsn : bigIntToLsn(lsnToBigInt(t1.commitEndLsn) + 1n);
 await service.acknowledge(arg);
 await new Promise((resolve) => setTimeout(resolve, 1000)); // let the WAL sender process the status update
 await service.stop();
@@ -63,7 +66,7 @@ const { rows: pending } = await db.query(
   [config.slot, config.publication],
 );
 const resent = pending.some((row) => row.xid === String(t2.xid));
-console.log(`mode:                        ${fixed ? 'fixed (ack end − 1)' : 'library (ack end)'}`);
+console.log(`mode:                        ${fixed ? 'fixed (confirm exactly the end)' : 'as 2.5.0 did (confirm end + 1)'}`);
 console.log(`T1 xid ${t1.xid}: commit ${t1.commitLsn} → end ${t1.commitEndLsn}  (acked)`);
 console.log(`T2 xid ${t2.xid}: commit ${t2.commitLsn} → end ${t2.commitEndLsn}  (NOT acked)`);
 console.log(`T2's commit starts where T1's ends: ${lsnToBigInt(t2.commitLsn) === lsnToBigInt(t1.commitEndLsn)}`);

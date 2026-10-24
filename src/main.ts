@@ -222,11 +222,11 @@ async function confirm(end: bigint): Promise<void> {
   await sendStatus(end);
 }
 
-// The library reports lsn + 1, but Postgres wants the END position itself (that's what its own subscriber
-// sends). Passing an end position straight through confirms one byte too far and can skip the next
-// transaction after a restart (docs/bugs/BUG-001), so subtract the 1 the library adds.
+// Postgres wants the END position itself (that's what its own subscriber sends), and since pg-logical-replication
+// 2.6.0 the library sends the position it's given unchanged. (2.5.0 added 1, which confirmed one byte too far and
+// could skip the next transaction after a restart: docs/bugs/BUG-001. ack-contract.test.ts guards this.)
 function sendStatus(end: bigint): Promise<boolean> {
-  return service.acknowledge(bigIntToLsn(end - 1n));
+  return service.acknowledge(bigIntToLsn(end));
 }
 
 function describe(txn: Transaction): string {

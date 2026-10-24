@@ -7,8 +7,10 @@ describes *now*; history lives in git.
 
 - Last checkpoint: **T13 — Multiple tables per instance** (tag `checkpoint/T13`).
 - Released: **`v0.2.0`** (Redis cache + several tables; T12–T13). `v0.1.0` = T10.
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). Everything is pushed; T13's CI run on GitHub
-  passed (run 39947004991: two tables, 12 SIGKILLs, 0 drift in every table and sink).
+- Published: **https://github.com/Kunal874/driftless** (public, MIT). v0.2.0 is pushed with CI green.
+- **Local, not pushed:** `pg-logical-replication` upgraded to 2.6.0 (2026-10-24, a recorded D-017 exception):
+  `sendStatus` passes `end` unchanged, the contract test expects that, and the BUG-001 repro now adds the 1 itself.
+  Push only with the owner's go-ahead.
 - Next step: nothing planned. New work needs a plan the owner approves.
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
@@ -61,8 +63,6 @@ describes *now*; history lives in git.
 - Schema-change handling (`ALTER TABLE` is untested).
 - D-027 (lanes) was written for Meilisearch alone; with Redis (fast) beside it, Meilisearch still sets the pace, so it
   stands. Re-measure if a faster search sink ever replaces it.
-- Upgrade `pg-logical-replication` to ≥ 2.6.0 once it passes the 14-day rule (2026-10-28): change `sendStatus` to
-  pass `end` unchanged in the same commit; `ack-contract.test.ts` will demand it (BUG-001 → Upstream).
 
 ## Files changed in T13
 

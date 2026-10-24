@@ -183,6 +183,13 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   weeks costs this project nothing. On 2026-10-22, `pg-logical-replication` 2.6.0 was 8 days old, so we
   took 2.5.0; `vitest` 5.0.3 instead of the 7-day-old 5.0.5.
 - **Consequences:** upgrades are deliberate. Use `npm ci` to install exactly what the lockfile says.
+- **Exception (2026-10-24, approved by the owner in chat):** `pg-logical-replication` 2.6.0 at 10 days old, because it
+  removes the `+ 1` behind BUG-001 that Driftless had to compensate for. The rule's risk (a bad release) was checked
+  directly instead of by waiting:
+  - the whole published package was diffed against 2.5.0: the only code change is ~10 lines in `acknowledge()`;
+  - no install scripts, the same runtime dependencies; the rest is the maintainers' dev tooling, docs and `engines`;
+  - the lockfile's integrity hash equals the hash of the tarball that was reviewed.
+  `sendStatus` now passes the end position unchanged, and `ack-contract.test.ts` expects exactly that.
 
 ### D-018 — TRUNCATE is streamed and handled, not filtered out
 - **Decision:** the publication keeps Postgres's default `publish = 'insert, update, delete, truncate'`. The
