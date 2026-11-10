@@ -6,9 +6,10 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
 
 - Last checkpoint: **T14 — Alerts** (tag `checkpoint/T14`).
 - Released: **`v0.2.0`** (T12–T13). `v0.3.0` will be T14 + T15. `v0.1.0` = T10.
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `2c39d55` (the
-  `pg-logical-replication` 2.6.0 upgrade, a recorded D-017 exception). **Everything from the T14/T15 plan on is local,
-  not pushed**: push only with the owner's go-ahead. CI's new promtool step has therefore not run on GitHub yet.
+- Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `9bab400` (T15.3), pushed
+  2026-11-11 with the owner's go-ahead; CI run 42904503784 green: unit job (incl. promtool + the npm pack-and-install
+  check, both for the first time on GitHub) and e2e (24,100 multi tx, 10 SIGKILLs, both tables × both sinks 0 drift,
+  self-test passed). Local commits after that: handover notes only.
 - **Approved 2026-11-11:** T15 (publish the image to GHCR and the CLI to npm as `driftless-cdc`, release `v0.3.0`).
 - **T15 in progress.** T15.1 ✅: `src/cli.ts` (entry) + `src/cli-args.ts` (`parseCli`, tested; `--self-test` refused);
   reconcile moved to `src/reconcile.ts` as `reconcile({ timeoutS, selfTest })`, with `scripts/reconcile.ts` as the
@@ -26,7 +27,11 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   nothing. Docker actions pinned by SHA: setup-qemu v4.4.0, setup-buildx v4.4.1, login v4.7.0 (v4.8.0 was 6 days old),
   metadata v6.2.0, build-push v7.4.0. Checked locally: YAML parses, `npm publish --dry-run`, an arm64 build runs
   (`aarch64`, module graph loads). **The workflow itself has not run on GitHub** (nothing pushed).
-- Next step: **T15.4**: owner steps, each with the owner's go-ahead (BUILD_PLAN.md).
+- T15.4 in progress: the push is done (above). Still to do, each with the owner's go-ahead: the owner's npm account; the
+  release dry run on GitHub (Actions → Release → Run workflow); the version bump to 0.3.0; the first npm publish
+  (by hand if trusted publishing needs the package to exist) + the trusted publisher; tag `v0.3.0`; the owner makes
+  the GHCR package public.
+- Next step: **T15.4** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
@@ -121,6 +126,10 @@ FLOW 4), `README.md` (cap + alerts), `AGENTS.md`, `learn/task-14-alerts.md`
 - Long runs (chaos, benchmarks, backfill races, slow-sink) belong in the background.
 - `docker compose up -d --force-recreate` deletes the old container's logs. Save logs first if you need them (BUG-004 lesson).
 - Docker Desktop may be stopped at session start. Start it before `docker compose up -d --wait`.
+- **Pushing:** git uses Git Credential Manager, which holds the **Skillgenz-dev** account for github.com, so a plain
+  `git push` is refused (403). On 2026-11-11 the owner had `gh` switched to Kunal874 (`gh auth switch`; Skillgenz-dev
+  stays signed in, inactive). Push through gh for that one command, nothing saved:
+  `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin main`.
 - `docker compose up -d connector` also **recreates a dependency whose config differs** from the compose file as read
   now (e.g. Postgres started with `PG_MAX_SLOT_WAL_KEEP_SIZE=256MB` goes back to 1 GB). Use `--no-deps` (T14.5).
 - The slot WAL cap is a `-c` flag, which beats `ALTER SYSTEM`: change it with `PG_MAX_SLOT_WAL_KEEP_SIZE` and recreate
