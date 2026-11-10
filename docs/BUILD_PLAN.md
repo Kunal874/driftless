@@ -503,7 +503,7 @@ live.
 - [x] T14.2 `docker/prometheus/alerts.yml` + `rule_files` and `evaluation_interval: 15s` in `prometheus.yml`;
       `docker/prometheus/alerts.test.yml` for `promtool test rules`: every alert fires on its synthetic series and
       stays silent on a healthy one, including no traffic (no lag alert) and an idle connector (no stall alert)
-- [ ] T14.3 CI: `promtool check rules` + `promtool test rules` in the unit job, run from the pinned
+- [x] T14.3 CI: `promtool check rules` + `promtool test rules` in the unit job, run from the pinned
       `prom/prometheus:v3.15.0` image (no new dependency)
 - [ ] T14.4 Dashboard panel "Firing alerts"
 - [ ] T14.5 Live proofs → RESULTS §14: (a) `docker compose kill connector` → `DriftlessDown` fires, then resolves after

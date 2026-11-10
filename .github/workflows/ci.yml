@@ -24,6 +24,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Alert rules (promtool, from the pinned Prometheus image)
+        run: |
+          promtool() { docker run --rm -v "$PWD/docker/prometheus:/rules:ro" --entrypoint promtool prom/prometheus:v3.15.0 "$@"; }
+          promtool check config /rules/prometheus.yml
+          promtool test rules /rules/alerts.test.yml
 
   e2e:
     name: End to end (backfill, SIGKILL chaos, reconcile = 0)

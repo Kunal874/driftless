@@ -19,7 +19,9 @@ describes *now*; history lives in git.
   mutant (`and` instead of `unless` in `DriftlessStalled`) fails the restart case. Prometheus loads the rules (all `ok`,
   `inactive` on the healthy stack); compose mounts the whole `docker/prometheus/` folder. promtool compares annotations
   exactly, so each alert has one templated `summary` only.
-- Next step: **T14.3** (BUILD_PLAN.md).
+- T14.3 ✅: the CI unit job runs `promtool check config` + `promtool test rules` from `prom/prometheus:v3.15.0`.
+  Passed locally with the same commands; **not yet run on GitHub** (nothing pushed since `2c39d55`).
+- Next step: **T14.4** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
