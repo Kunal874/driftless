@@ -10,7 +10,7 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 | | |
 |---|---|
 | Last checkpoint | **T13 — Multiple tables per instance** (tag `checkpoint/T13`); released as `v0.2.0` (`v0.1.0` = T10) |
-| Next step | nothing planned. New work starts with a plan the owner approves |
+| Next step | **T14.1** — T14 (alerts) and T15 (publish) approved 2026-11-11 |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

@@ -69,6 +69,8 @@ atomicity inside the index. High availability (stretch S2).
 | T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
 | T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | ✅ |
 | T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | ✅ |
+| T14 | Alerts: slot WAL, connector down or stalled, lag | 9 | approved 2026-11-11 |
+| T15 | Publish: image on GHCR, CLI on npm; release `v0.3.0` | 9 | approved 2026-11-11 |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -461,6 +463,136 @@ products-only mix stays exactly as it is (D-016), so earlier numbers stay compar
 **Pitfalls:** changing the backfill's saved-progress names must not restart a finished backfill or lose a running one
 (migrate the old row). Removing a table from the publication doesn't remove its older changes from the slot, so they
 must be skipped. Keep the existing single-table config files valid.
+
+---
+
+## T14 — Alerts: slot WAL, connector down or stalled, lag (approved by the owner 2026-11-11)
+
+**Goal:** the operational promise is real: "the slot can't fill the disk, and someone finds out before Postgres
+sacrifices it." We ship a Prometheus rule file anyone can drop into their own Prometheus. It fires when Driftless is down
+or stuck, when search falls behind, and before the slot is invalidated. It's tested with `promtool` in CI and proven
+live.
+
+**Design (recorded as D-031 when built):**
+- **The blind spot:** `driftless_slot_retained_wal_bytes` is measured by the connector itself. When Driftless is
+  dead, which is the case that fills the disk, nothing reports it. So "connector down" is its own alert, on
+  Prometheus's `up`. Measuring the slot from outside (postgres_exporter) would add a service. We skip it: `up == 0`
+  plus the cap (D-026) cover that case.
+- **One new gauge:** `driftless_slot_safe_wal_bytes`, read from `pg_replication_slots.safe_wal_size` in the same
+  query. It's how much more WAL Postgres can write before it invalidates the slot. The slot alerts use the share of the
+  cap in use, `retained / (retained + safe)`, so they work for any `max_slot_wal_keep_size`, not just our 1 GB. With
+  no cap (`-1`), `safe_wal_size` is NULL and those alerts can't fire, so Driftless also warns at startup when the cap
+  is unlimited.
+- **Rules** (`docker/prometheus/alerts.yml`, group `driftless`). The thresholds are starting points, commented in the
+  file as the knobs to tune:
+
+  | Alert | Fires when | For | Severity |
+  |---|---|---|---|
+  | `DriftlessDown` | `up{job="driftless"} == 0`: not running, so the slot holds WAL and search goes stale | 2m | critical |
+  | `DriftlessStalled` | running, transactions in flight, nothing applied: a sink is down or stuck (D-021 retries forever) | 5m | critical |
+  | `DriftlessLagHigh` | lag p99 over 5 min > 60 s (no traffic → no data → silent) | 10m | warning |
+  | `DriftlessSlotWalHigh` | over 50 % of the cap in use | 5m | warning |
+  | `DriftlessSlotWalCritical` | over 80 % of the cap in use: near invalidation, which means a full re-backfill | 1m | critical |
+
+- **Where alerts go:** Prometheus evaluates them and lists them at `:9090/alerts`. The dashboard gets one panel
+  showing `ALERTS{alertname=~"Driftless.*"}`. Sending them to Slack, email or a pager is the job of the user's own
+  Alertmanager. The demo stack gets no Alertmanager container; add one if local notifications are ever wanted.
+
+- [ ] T14.1 The gauge `driftless_slot_safe_wal_bytes` (the same query as the retained gauge); a startup warning when
+      `max_slot_wal_keep_size` is unlimited. Check both live (`GET /metrics`; a stack started without the cap)
+- [ ] T14.2 `docker/prometheus/alerts.yml` + `rule_files` and `evaluation_interval: 15s` in `prometheus.yml`;
+      `docker/prometheus/alerts.test.yml` for `promtool test rules`: every alert fires on its synthetic series and
+      stays silent on a healthy one, including no traffic (no lag alert) and an idle connector (no stall alert)
+- [ ] T14.3 CI: `promtool check rules` + `promtool test rules` in the unit job, run from the pinned
+      `prom/prometheus:v3.15.0` image (no new dependency)
+- [ ] T14.4 Dashboard panel "Firing alerts"
+- [ ] T14.5 Live proofs → RESULTS §14: (a) `docker compose kill connector` → `DriftlessDown` fires, then resolves after
+      a restart; (b) `docker pause meilisearch` under load → `DriftlessStalled`; (c) the cap lowered to 64 MB with
+      `ALTER SYSTEM` (as in T08.4), Meilisearch paused under load → `SlotWalHigh`, then `SlotWalCritical` *before* the
+      slot is lost; then reset the cap, unpause, reconcile → 0 drift; (d) record how close `retained + safe` is to the
+      cap
+- [ ] T14.6 README (monitoring: the alerts, using the rule file with your own Prometheus, the job label), ARCHITECTURE,
+      FLOW, D-031, `learn/task-14-alerts.md`, checkpoint
+
+**Dependencies:** none new (`promtool` ships in the Prometheus image we already pin).
+
+**Pitfalls**
+- The rules match `job="driftless"`. A user whose Prometheus calls the job something else must edit that one label,
+  so the README says so.
+- A connector run on the host isn't scraped (`prometheus.yml` targets the container). Run the proofs with the Docker
+  connector.
+- A new alert needs its `for:` plus up to one evaluation interval before it fires. Wait for it; don't shorten `for:`
+  to make a test pass.
+- With the cap at 64 MB, a Meilisearch pause that runs too long *will* lose the slot, and recovery is a full backfill
+  (D-026). Stop at `SlotWalCritical`; that's the proof. Reset the cap afterwards (`ALTER SYSTEM RESET`, as in T08.4).
+
+---
+
+## T15 — Publish: image on GHCR, CLI on npm; release `v0.3.0` (approved by the owner 2026-11-11)
+
+**Goal:** use Driftless without cloning it: `docker run ghcr.io/kunal874/driftless:0.3.0` or `npx driftless-cdc`. Both are
+built by CI from a version tag and checked against a real stack after publishing.
+
+**Design (recorded as D-032 when built):**
+- **Image:** `.github/workflows/release.yml` runs on tags `v*`. It runs typecheck + unit tests, refuses if the tag ≠
+  the `package.json` version, then builds the existing Dockerfile for `linux/amd64` and `linux/arm64` (Apple Silicon,
+  Graviton; every dependency is plain JS) and pushes `ghcr.io/kunal874/driftless:<version>` and `:latest`. It logs in
+  with the workflow's own `GITHUB_TOKEN` (`packages: write`), so no secret is stored. The label
+  `org.opencontainers.image.source` links the package to the repo. Users mount their config over
+  `/app/driftless.config.json` (or set `DRIFTLESS_CONFIG`) and pass secrets as env, as the README already says.
+- **The npm catch:** Node refuses to strip types from files inside `node_modules`
+  (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), so a package can't ship `src/*.ts` the way the image does. The npm
+  package ships JavaScript emitted by the `tsc` we already have: `tsconfig.build.json` emits to `dist/`, and
+  `rewriteRelativeImportExtensions` turns `./config.ts` into `./config.js`. Tests are excluded. Checked on 2026-11-11
+  with tsc 7.0.2: the emitted `main.js` loads its whole module graph and stops with the normal config error (exit 2).
+  **This build step is for the npm package only.** The image and the repo keep running the `.ts` files directly; D-004
+  stays, with the exception recorded in D-032.
+- **CLI** `src/cli.ts` (bin `driftless`), argument parsing with `node:util` `parseArgs` (no dependency):
+  - `driftless` runs the connector (today's `main.ts`).
+  - `driftless reconcile [--timeout=S]` compares every row with every sink and only reads. Exit 0 = identical, 1 =
+    drift. It moves from `scripts/` into `src/` so the package can ship it; `scripts/reconcile.ts` stays as a thin
+    wrapper, so every documented command keeps working. **`--self-test` stays out of the CLI:** it plants wrong
+    documents in the index, which is fine in a test stack and harmful in someone's production search.
+  - `--config <file>` (the same as `DRIFTLESS_CONFIG`), `--version`, `--help`.
+- **Name: `driftless-cdc`** (chosen by the owner 2026-11-11). `driftless` on npm is taken by an unrelated package
+  (v2.0.3, last changed 2022); `driftless-cdc` was free on 2026-11-11. The command it installs is still `driftless`.
+- **Publishing auth:** npm trusted publishing (OIDC from the release workflow: no stored token, and provenance is
+  attached). Owner steps: create the npm account. If npm requires the package to exist before a trusted publisher can
+  be added, the owner publishes `0.3.0` once by hand; later releases publish from CI.
+- **Package contents:** `files: ["dist", "README.md", "LICENSE"]`, `private` removed, `prepack` runs the build. Review
+  `npm pack --dry-run` for anything that shouldn't ship (config, `.env`, tests, `scripts/`).
+
+- [ ] T15.1 `src/cli.ts` + reconcile moved into `src/` (wrapper left in `scripts/`); unit test for argument parsing;
+      `tsconfig.build.json`, `npm run build`; `dist/` gitignored. `npm test` and the CI e2e still pass unchanged
+- [ ] T15.2 `package.json` for publishing (name, `bin`, `files`, `prepack`, no `private`); config error text no longer
+      assumes the repo root. Smoke test of the **packed tarball**, installed in an empty folder: `driftless --version`;
+      `driftless` streams against the dev stack; `driftless reconcile` → 0. The same pack-and-install check in CI (a
+      bad config → exit 2 proves every module resolves)
+- [ ] T15.3 `release.yml` (image + npm) with a `workflow_dispatch` dry run: build both architectures and run
+      `npm publish --dry-run`, pushing nothing. Actions pinned per D-017
+- [ ] T15.4 Owner steps, each only with the owner's go-ahead: the npm account and trusted publisher; push; the dry run
+      on GitHub; tag `v0.3.0` → the workflow publishes; the owner makes the GHCR package public (GitHub creates new
+      container packages as private)
+- [ ] T15.5 Verify from outside, on a throwaway stack (`COMPOSE_PROJECT_NAME=driftless-release`): the **published**
+      image and the **published** CLI (`npx` in an empty folder) each backfill, survive a SIGKILL + restart, and
+      reconcile to 0 → RESULTS §15. README "Install" section (docker run, npx) and badges; D-032;
+      `learn/task-15-publish.md`; checkpoint
+
+**Dependencies (approved by the owner 2026-11-11):** Docker's official GitHub Actions `docker/setup-qemu-action`,
+`docker/setup-buildx-action`, `docker/login-action`, `docker/metadata-action` and `docker/build-push-action`, at their
+current majors and at least 14 days old when T15.3 starts (D-017). No new npm dependencies.
+
+**Pitfalls**
+- Type stripping is off in `node_modules`, so test the **packed tarball**, never the repo checkout. The checkout works
+  either way and would hide the problem.
+- GHCR image names must be lowercase: `kunal874`, not `Kunal874`.
+- New GHCR packages are private. Until the owner makes it public, `docker pull` fails for everyone else.
+- Publishing is outward-facing and permanent: an npm version number can never be reused, even after an unpublish.
+  Do the dry run first; push the tag only with the owner's go-ahead.
+- `ci.yml` ignores tag pushes on purpose. `release.yml` is the only workflow that runs on tags.
+- The shipped `driftless.config.json` points at local-dev hosts. The image keeps it as its default; the npm package
+  doesn't ship it (users write their own, and the README gives a minimal one).
+- `v0.3.0` ships T14 and T15 together, so T14 comes first.
 
 ---
 

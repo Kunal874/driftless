@@ -8,10 +8,10 @@ describes *now*; history lives in git.
 - Last checkpoint: **T13 — Multiple tables per instance** (tag `checkpoint/T13`).
 - Released: **`v0.2.0`** (Redis cache + several tables; T12–T13). `v0.1.0` = T10.
 - Published: **https://github.com/Kunal874/driftless** (public, MIT). v0.2.0 is pushed with CI green.
-- **Local, not pushed:** `pg-logical-replication` upgraded to 2.6.0 (2026-10-24, a recorded D-017 exception):
+- `pg-logical-replication` upgraded to 2.6.0 (2026-10-24, a recorded D-017 exception, commit `2c39d55`, pushed):
   `sendStatus` passes `end` unchanged, the contract test expects that, and the BUG-001 repro now adds the 1 itself.
-  Push only with the owner's go-ahead.
-- Next step: nothing planned. New work needs a plan the owner approves.
+- **Approved 2026-11-11:** T14 (alerts) and T15 (publish to GHCR + npm as `driftless-cdc`, release `v0.3.0`).
+- Next step: **T14.1** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
