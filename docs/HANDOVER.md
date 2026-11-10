@@ -27,8 +27,12 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   nothing. Docker actions pinned by SHA: setup-qemu v4.4.0, setup-buildx v4.4.1, login v4.7.0 (v4.8.0 was 6 days old),
   metadata v6.2.0, build-push v7.4.0. Checked locally: YAML parses, `npm publish --dry-run`, an arm64 build runs
   (`aarch64`, module graph loads). **The workflow itself has not run on GitHub** (nothing pushed).
-- T15.4 in progress: the push is done (above). Still to do, each with the owner's go-ahead: the owner's npm account; the
-  release dry run on GitHub (Actions → Release → Run workflow); the version bump to 0.3.0; the first npm publish
+- T15.4 in progress: the push is done (above). **Release dry run** (owner's go-ahead): run 42905257464 on `9bab400`,
+  green in 56 s: typecheck + tests, both `linux/amd64` and `linux/arm64` built all 6 Dockerfile steps with
+  `push: false`, `npm publish --dry-run` packed the 21 files; tag check and GHCR login skipped as designed. Afterwards
+  `npm view driftless-cdc` → 404: nothing published. The image's `description` label comes from the GitHub repo
+  description, which still says Meilisearch only (the owner may update it). Still to do, each with the owner's go-ahead:
+  the owner's npm account; the version bump to 0.3.0; the first npm publish
   (by hand if trusted publishing needs the package to exist) + the trusted publisher; tag `v0.3.0`; the owner makes
   the GHCR package public.
 - Next step: **T15.4** (BUILD_PLAN.md).
