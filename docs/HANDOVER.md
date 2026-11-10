@@ -5,14 +5,14 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
 ## Current state
 
 - Last checkpoint: **T14 — Alerts** (tag `checkpoint/T14`).
-- Released: **`v0.2.0`** (T12–T13); `v0.1.0` = T10. **`driftless-cdc@0.3.0` is on npm** (published by the owner by
-  hand, 2026-11-11 21:39 UTC, maintainer `kunalchandrakar`). Its shasum `2eb34f41…` equals a local pack of the release
-  commit `cd3dca7` (21 files). `npx driftless-cdc@0.3.0` from an empty folder: `--version` → 0.3.0, reconcile of the
-  dev stack → 0 drift. Not yet: the image, the tag `v0.3.0`.
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `9bab400` (T15.3), pushed
-  2026-11-11 with the owner's go-ahead; CI run 42904503784 green: unit job (incl. promtool + the npm pack-and-install
-  check, both for the first time on GitHub) and e2e (24,100 multi tx, 10 SIGKILLs, both tables × both sinks 0 drift,
-  self-test passed). Local commits after that: handover notes only.
+- Released: **`v0.3.0`** (T14 + T15), 2026-11-11: tag on the release commit `cd3dca7`.
+  - npm: `driftless-cdc@0.3.0`, published by the owner by hand (shasum `2eb34f41…` = a local pack of `cd3dca7`).
+    `npx driftless-cdc@0.3.0` works from an empty folder (version; reconcile of the dev stack → 0 drift).
+  - GHCR: `ghcr.io/kunal874/driftless:0.3.0`, `:0.3`, `:latest` (amd64 + arm64), pushed by Release run 42909533705,
+    which skipped npm as designed ("already on npm"). Pullable anonymously (HTTP 200 with an anonymous token).
+  - `v0.2.0` = T12–T13, `v0.1.0` = T10.
+- Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `f8cea81`, pushed with the tags
+  `v0.3.0` and `checkpoint/T14` (owner's go-ahead); CI on it green (run 42909533029).
 - **Approved 2026-11-11:** T15 (publish the image to GHCR and the CLI to npm as `driftless-cdc`, release `v0.3.0`).
 - **T15 in progress.** T15.1 ✅: `src/cli.ts` (entry) + `src/cli-args.ts` (`parseCli`, tested; `--self-test` refused);
   reconcile moved to `src/reconcile.ts` as `reconcile({ timeoutS, selfTest })`, with `scripts/reconcile.ts` as the
@@ -30,18 +30,11 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   nothing. Docker actions pinned by SHA: setup-qemu v4.4.0, setup-buildx v4.4.1, login v4.7.0 (v4.8.0 was 6 days old),
   metadata v6.2.0, build-push v7.4.0. Checked locally: YAML parses, `npm publish --dry-run`, an arm64 build runs
   (`aarch64`, module graph loads). **The workflow itself has not run on GitHub** (nothing pushed).
-- T15.4 in progress: the push is done (above). **Release dry run** (owner's go-ahead): run 42905257464 on `9bab400`,
-  green in 56 s: typecheck + tests, both `linux/amd64` and `linux/arm64` built all 6 Dockerfile steps with
-  `push: false`, `npm publish --dry-run` packed the 21 files; tag check and GHCR login skipped as designed. Afterwards
-  `npm view driftless-cdc` → 404: nothing published. The image's `description` label comes from the GitHub repo
-  description, which still says Meilisearch only (the owner may update it). The owner's npm account exists; the version
-  bump to 0.3.0 is committed. npm requires a package to exist before a trusted publisher can be added (no "pending
-  publisher" as on PyPI), so the first publish is by hand. Still to do, in this order: (1) ✅ the owner published 0.3.0 by
-  hand; (2) the owner adds the trusted publisher
-  on npmjs.com (GitHub Actions, `Kunal874/driftless`, `release.yml`); (3) push `main` + tag `v0.3.0` (owner's
-  go-ahead): the workflow pushes the image and skips npm (0.3.0 already there). Pushing the tag BEFORE (1) would fail
-  the npm step (no trusted publisher yet); (4) the owner makes the GHCR package public.
-- Next step: **T15.4** (BUILD_PLAN.md).
+- T15.4 ✅ (see "Released" above). Release dry run first: run 42905257464, green, nothing published. The owner still
+  has to add the npm **trusted publisher** (driftless-cdc → Settings → Trusted publishing → `Kunal874` / `driftless` /
+  `release.yml`) before the next release, or that release's npm step fails. After 0.3.0, the duplicate `latest` in
+  the workflow's tag list was removed (metadata-action adds `latest` itself).
+- Next step: **T15.5** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now

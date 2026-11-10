@@ -575,9 +575,12 @@ built by CI from a version tag and checked against a real stack after publishing
 - [x] T15.3 `release.yml` (image + npm) with a `workflow_dispatch` dry run: build both architectures and run
       `npm publish --dry-run`, pushing nothing. Actions pinned per D-017 (by commit SHA; `login-action` v4.7.0, since
       v4.8.0 was 6 days old)
-- [ ] T15.4 Owner steps, each only with the owner's go-ahead: the npm account and trusted publisher; push; the dry run
+- [x] T15.4 Owner steps, each only with the owner's go-ahead: the npm account and trusted publisher; push; the dry run
       on GitHub; tag `v0.3.0` → the workflow publishes; the owner makes the GHCR package public (GitHub creates new
-      container packages as private)
+      container packages as private). *Done 2026-11-11:* the first npm publish by hand (npm needs the package to exist
+      before a trusted publisher can be added), then the tag; the image was publicly pullable straight away (an
+      anonymous GHCR token got HTTP 200), so no visibility change was needed. The trusted publisher is the owner's to
+      add before the next release (0.3.0 didn't need it: the workflow skips a version already on npm)
 - [ ] T15.5 Verify from outside, on a throwaway stack (`COMPOSE_PROJECT_NAME=driftless-release`): the **published**
       image and the **published** CLI (`npx` in an empty folder) each backfill, survive a SIGKILL + restart, and
       reconcile to 0 → RESULTS §15. README badges; D-032;
