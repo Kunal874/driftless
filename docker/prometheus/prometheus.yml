@@ -3,6 +3,10 @@
 # Postgres's are the same machine's (the lag metric compares the two).
 global:
   scrape_interval: 5s
+  evaluation_interval: 15s # how often the alert rules run (T14)
+
+rule_files:
+  - alerts.yml # Driftless's alerts (T14, D-031); listed at http://127.0.0.1:9090/alerts
 
 scrape_configs:
   - job_name: driftless

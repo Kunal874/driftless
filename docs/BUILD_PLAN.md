@@ -500,7 +500,7 @@ live.
 
 - [x] T14.1 The gauge `driftless_slot_safe_wal_bytes` (the same query as the retained gauge); a startup warning when
       `max_slot_wal_keep_size` is unlimited. Check both live (`GET /metrics`; a stack started without the cap)
-- [ ] T14.2 `docker/prometheus/alerts.yml` + `rule_files` and `evaluation_interval: 15s` in `prometheus.yml`;
+- [x] T14.2 `docker/prometheus/alerts.yml` + `rule_files` and `evaluation_interval: 15s` in `prometheus.yml`;
       `docker/prometheus/alerts.test.yml` for `promtool test rules`: every alert fires on its synthetic series and
       stays silent on a healthy one, including no traffic (no lag alert) and an idle connector (no stall alert)
 - [ ] T14.3 CI: `promtool check rules` + `promtool test rules` in the unit job, run from the pinned

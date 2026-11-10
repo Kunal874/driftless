@@ -1,0 +1,62 @@
+# Driftless alert rules (T14, D-031). To use them in your own Prometheus: list this file under `rule_files:` and scrape
+# the connector's GET /metrics as job "driftless" (or change `job="driftless"` below). Prometheus evaluates the rules
+# and lists them at /alerts; routing them to Slack, email or a pager is your Alertmanager's job.
+# The thresholds are starting points: tune them to how stale your search may get and how fast your WAL grows.
+# Tested by docker/prometheus/alerts.test.yml (`promtool test rules`, run in CI).
+groups:
+  - name: driftless
+    rules:
+      - alert: DriftlessDown
+        # Prometheus's own `up` series: the only signal left when the connector is dead, since its metrics die with it.
+        expr: up{job="driftless"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Driftless on {{ $labels.instance }} is down: search and cache go stale, Postgres keeps WAL for its slot"
+
+      - alert: DriftlessStalled
+        # Transactions are waiting but nothing was applied for 2 minutes: a sink is down or keeps failing (Driftless
+        # retries it forever, D-021). `unless` rather than `and`: before the first applied change since a restart, the
+        # counter has no series at all, and a connector restarted while a sink is down must still alert.
+        expr: >-
+          driftless_txns_in_flight > 0
+          unless on (instance) (sum by (instance) (rate(driftless_changes_applied_total[2m])) > 0)
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Driftless on {{ $labels.instance }} has applied nothing for 5 minutes: a sink is down or failing"
+
+      - alert: DriftlessLagHigh
+        # Commit in Postgres → applied everywhere, p99 over 5 minutes. With no traffic there are no observations, the
+        # quantile is NaN and the alert stays silent.
+        expr: histogram_quantile(0.99, sum by (instance, le) (rate(driftless_lag_seconds_bucket[5m]))) > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search behind Postgres by over 60 s (p99) on {{ $labels.instance }}"
+
+      - alert: DriftlessSlotWalHigh
+        # Share of the slot WAL cap in use. safe = what Postgres may still write before it invalidates the slot, so
+        # retained + safe is the cap, whatever max_slot_wal_keep_size is. No cap → safe is NaN → silent (Driftless
+        # warns about that at startup).
+        expr: >-
+          driftless_slot_retained_wal_bytes
+          / (driftless_slot_retained_wal_bytes + driftless_slot_safe_wal_bytes) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Replication slot of {{ $labels.instance }} holds over half of max_slot_wal_keep_size"
+
+      - alert: DriftlessSlotWalCritical
+        expr: >-
+          driftless_slot_retained_wal_bytes
+          / (driftless_slot_retained_wal_bytes + driftless_slot_safe_wal_bytes) > 0.8
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Replication slot of {{ $labels.instance }} near invalidation (over 80 % of the cap): then a full backfill"

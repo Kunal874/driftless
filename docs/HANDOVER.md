@@ -15,7 +15,11 @@ describes *now*; history lives in git.
   a startup warning when `max_slot_wal_keep_size` is unlimited (checked live with `PG_MAX_SLOT_WAL_KEEP_SIZE=-1`).
   Compose now reads the cap from `PG_MAX_SLOT_WAL_KEEP_SIZE` (default `1GB`): a `-c` setting beats `ALTER SYSTEM`, so
   T14.5 lowers the cap by recreating `postgres` with that variable, not with `ALTER SYSTEM` as T08.4 did.
-- Next step: **T14.2** (BUILD_PLAN.md).
+- T14.2 ✅: `docker/prometheus/alerts.yml` (5 alerts) + `alerts.test.yml`; `promtool test rules` passes, and a
+  mutant (`and` instead of `unless` in `DriftlessStalled`) fails the restart case. Prometheus loads the rules (all `ok`,
+  `inactive` on the healthy stack); compose mounts the whole `docker/prometheus/` folder. promtool compares annotations
+  exactly, so each alert has one templated `summary` only.
+- Next step: **T14.3** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now

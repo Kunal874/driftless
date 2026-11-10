@@ -101,7 +101,7 @@ services:
     profiles: ["metrics"]
     image: prom/prometheus:v3.15.0
     volumes:
-      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus:/etc/prometheus:ro # prometheus.yml + alerts.yml (T14)
     ports:
       - "127.0.0.1:9090:9090"
 

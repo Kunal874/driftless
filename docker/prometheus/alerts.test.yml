@@ -1,0 +1,131 @@
+# Unit tests for alerts.yml (T14.2): every alert fires on its own synthetic series and stays silent on a healthy one.
+# Run: docker run --rm -v "$PWD/docker/prometheus:/rules:ro" --entrypoint promtool prom/prometheus:v3.15.0 \
+#        test rules /rules/alerts.test.yml
+rule_files:
+  - alerts.yml
+evaluation_interval: 15s
+
+tests:
+  # Down: scraped fine for 30 s, then not at all. Fires after 2 minutes of `up == 0`, not before.
+  - interval: 30s
+    input_series:
+      - series: 'up{job="driftless", instance="connector:9464"}'
+        values: '1 0x10'
+      - series: 'up{job="other", instance="other:1"}' # another job going down is not Driftless's alert
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: DriftlessDown
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: DriftlessDown
+        exp_alerts:
+          - exp_labels: { severity: critical, job: driftless, instance: 'connector:9464' }
+            exp_annotations: { summary: "Driftless on connector:9464 is down: search and cache go stale, Postgres keeps WAL for its slot" }
+
+  # Stalled: transactions in flight and the applied counter flat → fires; it never fires while changes are applied.
+  - interval: 1m
+    input_series:
+      - series: 'driftless_txns_in_flight{job="driftless", instance="stuck:9464"}'
+        values: '5x10'
+      - series: 'driftless_changes_applied_total{job="driftless", instance="stuck:9464", op="update", table="public.products"}'
+        values: '100x10'
+      - series: 'driftless_txns_in_flight{job="driftless", instance="busy:9464"}'
+        values: '5x10'
+      - series: 'driftless_changes_applied_total{job="driftless", instance="busy:9464", op="update", table="public.products"}'
+        values: '0+600x10'
+      - series: 'driftless_txns_in_flight{job="driftless", instance="idle:9464"}'
+        values: '0x10'
+      - series: 'driftless_changes_applied_total{job="driftless", instance="idle:9464", op="update", table="public.products"}'
+        values: '100x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: DriftlessStalled
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: DriftlessStalled
+        exp_alerts:
+          - exp_labels: { severity: critical, job: driftless, instance: 'stuck:9464' }
+            exp_annotations: { summary: "Driftless on stuck:9464 has applied nothing for 5 minutes: a sink is down or failing" }
+
+  # Stalled right after a restart: nothing applied yet, so the counter has no series at all. Must still fire.
+  - interval: 1m
+    input_series:
+      - series: 'driftless_txns_in_flight{job="driftless", instance="restarted:9464"}'
+        values: '3x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DriftlessStalled
+        exp_alerts:
+          - exp_labels: { severity: critical, job: driftless, instance: 'restarted:9464' }
+            exp_annotations: { summary: "Driftless on restarted:9464 has applied nothing for 5 minutes: a sink is down or failing" }
+
+  # Lag: "slow" observes 10 changes/s, all between 60 and 120 s; "fast" all under 1 s; "quiet" has no traffic.
+  - interval: 1m
+    input_series:
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="slow:9464", le="1"}'
+        values: '0x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="slow:9464", le="60"}'
+        values: '0x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="slow:9464", le="120"}'
+        values: '0+600x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="slow:9464", le="+Inf"}'
+        values: '0+600x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="fast:9464", le="1"}'
+        values: '0+600x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="fast:9464", le="60"}'
+        values: '0+600x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="fast:9464", le="120"}'
+        values: '0+600x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="fast:9464", le="+Inf"}'
+        values: '0+600x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="quiet:9464", le="1"}'
+        values: '50x20'
+      - series: 'driftless_lag_seconds_bucket{job="driftless", instance="quiet:9464", le="+Inf"}'
+        values: '50x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DriftlessLagHigh
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: DriftlessLagHigh
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: 'slow:9464' }
+            exp_annotations: { summary: "Search behind Postgres by over 60 s (p99) on slow:9464" }
+
+  # Slot WAL, as a share of the cap (retained + safe): 30 % → nothing; 60 % → warning; 90 % → warning and critical;
+  # no cap (safe = NaN) → nothing, however much is retained.
+  - interval: 1m
+    input_series:
+      - series: 'driftless_slot_retained_wal_bytes{job="driftless", instance="ok:9464"}'
+        values: '300000000x10'
+      - series: 'driftless_slot_safe_wal_bytes{job="driftless", instance="ok:9464"}'
+        values: '700000000x10'
+      - series: 'driftless_slot_retained_wal_bytes{job="driftless", instance="half:9464"}'
+        values: '600000000x10'
+      - series: 'driftless_slot_safe_wal_bytes{job="driftless", instance="half:9464"}'
+        values: '400000000x10'
+      - series: 'driftless_slot_retained_wal_bytes{job="driftless", instance="full:9464"}'
+        values: '900000000x10'
+      - series: 'driftless_slot_safe_wal_bytes{job="driftless", instance="full:9464"}'
+        values: '100000000x10'
+      - series: 'driftless_slot_retained_wal_bytes{job="driftless", instance="nocap:9464"}'
+        values: '50000000000x10'
+      - series: 'driftless_slot_safe_wal_bytes{job="driftless", instance="nocap:9464"}'
+        values: 'NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: DriftlessSlotWalCritical
+        exp_alerts:
+          - exp_labels: { severity: critical, job: driftless, instance: 'full:9464' }
+            exp_annotations: { summary: "Replication slot of full:9464 near invalidation (over 80 % of the cap): then a full backfill" }
+      - eval_time: 4m
+        alertname: DriftlessSlotWalHigh
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: DriftlessSlotWalHigh
+        exp_alerts:
+          - exp_labels: { severity: warning, job: driftless, instance: 'half:9464' }
+            exp_annotations: { summary: "Replication slot of half:9464 holds over half of max_slot_wal_keep_size" }
+          - exp_labels: { severity: warning, job: driftless, instance: 'full:9464' }
+            exp_annotations: { summary: "Replication slot of full:9464 holds over half of max_slot_wal_keep_size" }
