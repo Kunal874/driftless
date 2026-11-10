@@ -1,6 +1,8 @@
 # Driftless
 
 [![CI](https://github.com/Kunal874/driftless/actions/workflows/ci.yml/badge.svg)](https://github.com/Kunal874/driftless/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/driftless-cdc)](https://www.npmjs.com/package/driftless-cdc)
+[![image](https://img.shields.io/badge/image-ghcr.io%2Fkunal874%2Fdriftless-blue)](https://github.com/Kunal874/driftless/pkgs/container/driftless)
 
 **Keeps Meilisearch indexes and a Redis cache in sync with Postgres tables by reading the database's write-ahead
 log, and proves they never drift apart, even when the sync process (or Redis itself) is killed mid-write.**
@@ -12,7 +14,8 @@ streams every committed change out of Postgres's WAL (logical replication) and a
 Redis cache, at least once and in commit order per row, and it tells Postgres "done" only after the change is really
 in both.
 
-Written in TypeScript on Node 24 (run directly, no build step). Postgres 17, Meilisearch 1.54, Redis 8, Docker Compose.
+Written in TypeScript on Node 24 (run directly, no build step; the npm package ships compiled JavaScript). Postgres 17,
+Meilisearch 1.54, Redis 8, Docker Compose.
 
 ## Results
 
@@ -290,6 +293,7 @@ and config validation. The claims are proven by scripts against the real stack:
 | `scripts/backfill-race.sh DELAY RATE SECONDS [KILL_EVERY]` | backfill racing concurrent writes (and crashes) |
 | `scripts/slow-sink.sh PAUSE RATE MAX_PENDING [SERVICE]` | bounded memory while Meilisearch (or `redis`) is frozen |
 | `scripts/alert-drill.sh down\|stalled\|slot [RATE]` | each alert fires for real, then resolves (needs the `metrics` profile) |
+| `scripts/release-check.sh [VERSION] [ROWS]` | a *published* release as users get it: the GHCR image, then `npx driftless-cdc`, each backfilling, SIGKILLed under load, 0 drift (own compose project) |
 | `scripts/redis-crash.sh always\|everysec\|rdb` | SIGKILL Redis under load, then reconcile the cache (own compose project) |
 | `scripts/bench-drain.sh LANES BATCH_MAX RATE SECONDS` | backlog drain throughput |
 | `node scripts/bench-lag.ts RATE SECONDS CLIENTS` | end-to-end lag quantiles at a fixed write rate |

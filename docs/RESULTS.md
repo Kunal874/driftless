@@ -375,6 +375,32 @@ check that the cap really is 256 MB; the rerun is the last row. The 1 GB run sti
   last step, so the minute Critical waited took it from 87 % to 90 %. A smaller cap or a faster-growing WAL
   leaves less time: size the cap so that 20 % of it is more than a few minutes of your WAL.
 
+## 15. The published 0.3.0, checked from outside (T15)
+
+2026-11-11. What users get, not the repo: the image from GHCR and the package from npm, each on a fresh throwaway stack
+(`COMPOSE_PROJECT_NAME=driftless-release`, 20,000 products + 5,000 customers seeded), with a config written for
+containers (service names, secrets as env). **Command:** `scripts/release-check.sh 0.3.0 20000`.
+
+| What ran | How | Backfill | Writes (multi mix, 200 tx/s, 60 s) | SIGKILLs | Published `driftless reconcile` |
+|---|---|---|---|---|---|
+| `ghcr.io/kunal874/driftless:0.3.0` | pulled **anonymously** (amd64, revision `cd3dca7`) | both tables by itself, < 12 s after start | 11,940 (0 failed) | 3 | 19,993 + 5,059 rows = documents = keys, **0 / 0 / 0** |
+| `npx -y driftless-cdc@0.3.0` | in a clean `node:24.18.0-alpine` container (fresh npm cache) | both tables by itself, < 15 s after start | 12,150 (0 failed) | 3 | 20,040 + 5,095 rows = documents = keys, **0 / 0 / 0** |
+
+Around it, also on 2026-11-11:
+
+| Check | Result |
+|---|---|
+| npm tarball = the release commit | `npm view driftless-cdc@0.3.0 dist.shasum` = `2eb34f41…` = `npm pack` of `cd3dca7` (21 files) |
+| `npx driftless-cdc@0.3.0` on the host, empty folder | `--version` → 0.3.0; reconcile of the main stack (300,340 + 20,982 rows) → 0 drift |
+| Release workflow, dry run (by hand) | run 42905257464: amd64 + arm64 built (6/6 steps each), `push: false`, `npm publish --dry-run`; nothing published |
+| Release workflow, tag `v0.3.0` | run 42909533705: image pushed as `0.3.0`, `0.3`, `latest`; npm skipped ("already on npm") |
+| arm64 image | built and run locally under emulation: `aarch64`, the module graph loads (T15.3) |
+| CI with the pack-and-install check | runs 42904503784 and 42909533029 green |
+
+The first release-check run stopped at its reconcile: it ran `npx driftless-cdc` from the repo root, whose own
+`package.json` is now named `driftless-cdc`, so npx took the checkout for the package. The check now runs it from an
+empty folder; the run above is the second one.
+
 ---
 
 ## Resume claims: status
@@ -387,4 +413,5 @@ check that the cap really is 256 MB; the rerun is the last row. The 1 GB run sti
 | A cache that is never stale (T12) | **measured (§12)**: the Redis cache stays exact under connector SIGKILLs (11 kills, 0 drift over 282,154 rows) and under a **Redis SIGKILL** with `appendfsync always` (0 drift). With Redis's default persistence the same crash left **6,238 wrong keys** (4,143 rolled back to older values). Redis adds ~0.15 s of lag at 1,000 tx/s |
 | Several tables, cross-table transactions (T13) | **measured (§13)**: two tables (290k + 20k rows) × two sinks stay exact through 11 SIGKILLs with cross-table transactions, a backfill race with 7 SIGKILLs, and adding, removing and re-adding a table on a running deployment |
 | Alerts that fire before damage (T14) | **measured (§14)**: connector down → alert in 2.5 min; stalled sink under load → 5.4 min; slot WAL → warning at 60 % and critical at 87 % of the cap, both before the slot was lost, at a 1 GB and a 256 MB cap; 0 drift after each drill |
+| Usable without cloning (T15) | **measured (§15)**: the published image (GHCR, amd64 + arm64) and the npm CLI `driftless-cdc` each backfilled a fresh stack, survived 3 SIGKILLs under load and left 0 drift, checked with the published reconcile |
 | Debugging story | BUG-001 (library ack off-by-one); **BUG-002** (backfill race: 42 docs wrong → fixed with watermarks); **BUG-003** (the watermark algorithm assumed full row images; Postgres omits unchanged TOAST → 1 doc → 0) |

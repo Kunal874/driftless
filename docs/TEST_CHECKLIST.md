@@ -175,12 +175,12 @@ Handy commands:
       before the slot is lost; cap reset; reconcile → 0 drift
 - [x] The dashboard's "Firing alerts" panel shows them
 
-## T15 — Publish
+## T15 — Publish ✅ (verified 2026-11-11)
 
-- [ ] `npm test`, typecheck and the CI e2e pass with reconcile moved into `src/` (the `scripts/` wrapper still works)
-- [ ] `npm pack --dry-run` lists only `dist/`, README, LICENSE and package.json
-- [ ] The packed tarball, installed in an empty folder: `driftless --version`; streams against the dev stack;
+- [x] `npm test`, typecheck and the CI e2e pass with reconcile moved into `src/` (the `scripts/` wrapper still works)
+- [x] `npm pack --dry-run` lists only `dist/`, README, LICENSE and package.json (21 files)
+- [x] The packed tarball, installed in an empty folder: `driftless --version`; streams against the dev stack;
       `driftless reconcile` → 0; a bad config → exit 2
-- [ ] The release workflow's dry run builds amd64 + arm64 and `npm publish --dry-run` passes, pushing nothing
-- [ ] After `v0.3.0`: the published image and the published CLI each backfill a throwaway stack, survive a SIGKILL +
+- [x] The release workflow's dry run builds amd64 + arm64 and `npm publish --dry-run` passes, pushing nothing
+- [x] After `v0.3.0`: the published image and the published CLI each backfill a throwaway stack, survive a SIGKILL +
       restart and reconcile to 0; `docker pull` works signed out (the package is public)

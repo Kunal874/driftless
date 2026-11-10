@@ -9,7 +9,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-001 | Read changes from the Postgres WAL (CDC); never dual-write | Accepted | design |
 | D-002 | `pgoutput` plugin, protocol v1 | Accepted | design → T03 |
 | D-003 | Meilisearch as the first sink | Accepted | T01 |
-| D-004 | TypeScript on Node 24, run directly (no build step) | Accepted | design → T03 |
+| D-004 | TypeScript on Node 24, run directly (no build step; one exception: the npm package, D-032) | Accepted | design → T03 |
 | D-005 | No Kafka or other broker | Accepted | design |
 | D-006 | At-least-once delivery + idempotent writes; ack after apply | Accepted | design → T04 |
 | D-007 | Per-primary-key ordered lanes | Accepted | design → T06 |
@@ -37,6 +37,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-029 | Redis as a second sink: hashes, both-or-nothing, durable acknowledgements, readers never write | Accepted | T12 |
 | D-030 | Several tables per instance: one mirror per table, one stream, per-table backfill rounds | Accepted | T13 |
 | D-031 | Alerts: a Prometheus rule file; the slot alerts measure the share of the cap; `up` for a dead connector | Accepted | T14 |
+| D-032 | Publish: image on GHCR, CLI on npm as `driftless-cdc` (compiled JS); releases from a tag | Accepted | T15 |
 
 ---
 
@@ -434,4 +435,27 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   the alerts at `/alerts`, and the dashboard shows them.
 - **Consequences:** users must scrape Driftless as job `driftless` or edit one label. The thresholds are starting points;
   the file says so.
+
+### D-032 — Publish: image on GHCR, CLI on npm as `driftless-cdc` (compiled JS); releases from a tag
+- **Decision:** a `v*` tag runs `.github/workflows/release.yml`: typecheck + tests, tag = package version, the image for
+  amd64 + arm64 to `ghcr.io/kunal874/driftless` (`<version>`, `<major>.<minor>`, `latest`), then `npm publish
+  --provenance` through npm trusted publishing (OIDC: no stored token). Running it by hand is a dry run that publishes
+  nothing. The npm step skips a version that's already on npm.
+- **An exception to D-004, for the npm package only:** Node refuses to strip types from files inside `node_modules`
+  (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), so the package ships JavaScript that `tsc -p tsconfig.build.json`
+  emits (`rewriteRelativeImportExtensions` turns `./x.ts` into `./x.js`). The repo and the image still run the `.ts`
+  files. The packed tarball is what gets tested (locally and in CI), because the checkout works either way.
+- **CLI:** `driftless` runs the connector; `driftless reconcile` is read-only. `--self-test` stays in the repo script:
+  it plants wrong documents. Parsing lives in `cli-args.ts` (tested); `cli.ts` only dispatches. `import.meta.main`
+  is avoided (missing from older Node 24 releases, where the CLI would silently do nothing).
+- **Name:** `driftless` on npm was taken (an unrelated 2022 package), so the package is `driftless-cdc` (the owner's
+  choice); the command is still `driftless`.
+- **Direct dependencies pinned exactly:** `npx` ignores our lockfile, so a range would hand users versions we never
+  tested. Transitive dependencies still float (`npm-shrinkwrap.json` would lock them; not worth it yet).
+- **Actions pinned by commit SHA,** each at least 14 days old when chosen (D-017): a tag can be moved, and this
+  workflow holds `packages: write` and `id-token: write`.
+- **First publish by hand:** npm needs a package to exist before a trusted publisher can be added. 0.3.0 was published
+  by the owner; its tarball's shasum equals a local pack of the release commit.
+- **Consequences:** two run paths (the `.ts` sources in the repo and image; the emitted JS on npm), both checked by
+  CI. `prom-client` 15 is deprecated on npm, so every install prints a warning (a follow-up, not a blocker).
 

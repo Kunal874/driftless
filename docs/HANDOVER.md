@@ -1,52 +1,34 @@
 # Handover — where we left off
 
-Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes *now*; history lives in git.
+Updated 2026-11-11, end of T15. Overwrite this at every checkpoint: it describes *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T14 — Alerts** (tag `checkpoint/T14`).
-- Released: **`v0.3.0`** (T14 + T15), 2026-11-11: tag on the release commit `cd3dca7`.
-  - npm: `driftless-cdc@0.3.0`, published by the owner by hand (shasum `2eb34f41…` = a local pack of `cd3dca7`).
-    `npx driftless-cdc@0.3.0` works from an empty folder (version; reconcile of the dev stack → 0 drift).
-  - GHCR: `ghcr.io/kunal874/driftless:0.3.0`, `:0.3`, `:latest` (amd64 + arm64), pushed by Release run 42909533705,
-    which skipped npm as designed ("already on npm"). Pullable anonymously (HTTP 200 with an anonymous token).
+- Last checkpoint: **T15 — Publish** (tag `checkpoint/T15`). The approved plan (T14 + T15) is complete.
+- Released: **`v0.3.0`** (T14 + T15), tag on the release commit `cd3dca7`:
+  - npm: **`driftless-cdc@0.3.0`** (command `driftless`), published by the owner by hand; shasum = a pack of `cd3dca7`.
+  - GHCR: **`ghcr.io/kunal874/driftless:0.3.0`**, `:0.3`, `:latest` (amd64 + arm64), public, pushed by Release run
+    42909533705.
+  - Checked from outside with `scripts/release-check.sh 0.3.0`: image and npm CLI each backfilled, 3 SIGKILLs, 0 drift
+    (RESULTS §15).
   - `v0.2.0` = T12–T13, `v0.1.0` = T10.
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `f8cea81`, pushed with the tags
-  `v0.3.0` and `checkpoint/T14` (owner's go-ahead); CI on it green (run 42909533029).
-- **Approved 2026-11-11:** T15 (publish the image to GHCR and the CLI to npm as `driftless-cdc`, release `v0.3.0`).
-- **T15 in progress.** T15.1 ✅: `src/cli.ts` (entry) + `src/cli-args.ts` (`parseCli`, tested; `--self-test` refused);
-  reconcile moved to `src/reconcile.ts` as `reconcile({ timeoutS, selfTest })`, with `scripts/reconcile.ts` as the
-  wrapper every script still calls; `tsconfig.build.json` + `npm run build` → `dist/` (gitignored). `import.meta.main`
-  avoided on purpose (only newer Node 24 releases have it), hence the two files. `npm test` 75/75; CI e2e locally
-  (`driftless-ci`, removed afterwards): 24,380 tx, 10 SIGKILLs, 0 drift, self-test passed.
-- T15.2 ✅: package `driftless-cdc` (bin `driftless`, `files: ["dist"]`, `prepack` builds, `private` gone, direct
-  dependencies pinned exactly); the tarball holds only `dist/`, README, LICENSE, package.json (36.6 kB). Smoke test of
-  the packed tarball in an empty folder: version, bad config → exit 2 (run and reconcile), then it **streamed** 4,168
-  multi transactions against the dev stack and `npx driftless reconcile` → 0 drift. CI's unit job repeats the
-  pack-and-install check. README: "Use it with your own database" (docker run, npx).
-- T15.3 ✅: `.github/workflows/release.yml`: on `v*` tags typecheck + tests, tag = package version, image for
-  amd64 + arm64 to `ghcr.io/kunal874/driftless` (`<version>`, `<major>.<minor>`, `latest`), then `npm publish
-  --provenance` (skipped if that version is already on npm); by hand (`workflow_dispatch`) a dry run that pushes
-  nothing. Docker actions pinned by SHA: setup-qemu v4.4.0, setup-buildx v4.4.1, login v4.7.0 (v4.8.0 was 6 days old),
-  metadata v6.2.0, build-push v7.4.0. Checked locally: YAML parses, `npm publish --dry-run`, an arm64 build runs
-  (`aarch64`, module graph loads). **The workflow itself has not run on GitHub** (nothing pushed).
-- T15.4 ✅ (see "Released" above). Release dry run first: run 42905257464, green, nothing published. The owner still
-  has to add the npm **trusted publisher** (driftless-cdc → Settings → Trusted publishing → `Kunal874` / `driftless` /
-  `release.yml`) before the next release, or that release's npm step fails. After 0.3.0, the duplicate `latest` in
-  the workflow's tag list was removed (metadata-action adds `latest` itself).
-- Next step: **T15.5** (BUILD_PLAN.md).
-- Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
+- GitHub: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `f8cea81` with tags `v0.3.0` and
+  `checkpoint/T14`. **Local, not pushed:** the commits after `f8cea81` (T15.4 wrap-up, T15.5) and `checkpoint/T15`.
+- **Owner to-do before the next release:** add the npm trusted publisher (driftless-cdc → Settings → Trusted publishing
+  → `Kunal874` / `driftless` / `release.yml`); without it the next release's npm step fails (FLOW 6).
+- Next step: nothing planned. New work starts with a plan the owner approves.
+- Throwaway compose projects (`driftless-redis`, `driftless-ci`, `driftless-release`) are removed, volumes included.
 
 ## What the system holds right now
 
-- `products`: 300,216 rows and `customers`: 20,935 rows; their indexes and Redis keys are **identical** to them (last
-  reconcile 0 / 0 / 0 everywhere, after the T14.5 slot drill).
+- `products`: 300,340 rows and `customers`: 20,982 rows; their indexes and Redis keys are **identical** to them (last
+  reconcile 0 / 0 / 0 everywhere, by the published `npx driftless-cdc@0.3.0 reconcile`, T15.4).
 - The shipped config mirrors both tables; the publication holds products, customers and the watermark table.
 - Redis 8.10.1 on 127.0.0.1:6381, AOF `appendfsync always`, volume `driftless_redisdata`.
 - Slot `driftless_slot` `reserved`. Postgres runs with `max_slot_wal_keep_size=1GB` (compose variable
   `PG_MAX_SLOT_WAL_KEEP_SIZE`, default `1GB`).
-- **Everything is running**: `postgres`, `meilisearch`, `redis`, `connector`, `prometheus` (with the alert rules, all
-  inactive) and `grafana`.
+- **Everything is running**: `postgres`, `meilisearch`, `redis`, `connector` (built from the current sources),
+  `prometheus` (alert rules all inactive) and `grafana`.
 
 ## Done
 
@@ -91,6 +73,14 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   - Proofs (RESULTS §14, `scripts/alert-drill.sh`): Down 2.5 min after a SIGKILL; Stalled 5.4 min after freezing
     Meilisearch under load; slot alerts at 60 % and 87 %, at the 1 GB and a 256 MB cap, before the slot was lost; all
     resolved; 0 drift after each. `npm test` 70/70.
+- **T15 ✅** Publish (D-032):
+  - `driftless` CLI (`src/cli.ts` + `src/cli-args.ts`): run, read-only `reconcile`; `--self-test` refused (repo only).
+    Reconcile moved to `src/reconcile.ts`; `scripts/reconcile.ts` is a wrapper.
+  - npm package `driftless-cdc`: JavaScript from `tsconfig.build.json` (no type stripping in `node_modules`), 21 files,
+    direct dependencies pinned exactly. CI installs the packed tarball on every push.
+  - `.github/workflows/release.yml`: tag → image (amd64 + arm64) to GHCR + npm with provenance; by hand → dry run.
+    Actions pinned by SHA (D-017).
+  - Released `v0.3.0`; checked from outside with `scripts/release-check.sh` (RESULTS §15). `npm test` 75/75.
 
 ## Ideas, if the owner wants more (none started)
 
@@ -101,14 +91,13 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
 - D-027 (lanes) was written for Meilisearch alone; with Redis (fast) beside it, Meilisearch still sets the pace, so it
   stands. Re-measure if a faster search sink ever replaces it.
 
-## Files changed in T14
+## Files changed in T15
 
-`src/main.ts` (safe-WAL gauge), `src/source/replication.ts` (no-cap warning), `docker-compose.yml`
-(`PG_MAX_SLOT_WAL_KEEP_SIZE`; the whole `docker/prometheus/` folder mounted), `docker/prometheus/prometheus.yml`
-(`rule_files`, 15 s evaluation), `docker/prometheus/alerts.yml` + `alerts.test.yml` (new),
-`docker/grafana/dashboards/driftless.json` (alerts panel), `.github/workflows/ci.yml` (promtool),
-`scripts/alert-drill.sh` (new), `docs/` (BUILD_PLAN T14/T15, TEST_CHECKLIST, RESULTS §14, DECISIONS D-031, ARCHITECTURE,
-FLOW 4), `README.md` (cap + alerts), `AGENTS.md`, `learn/task-14-alerts.md`
+`src/cli.ts`, `src/cli-args.ts` + test, `src/reconcile.ts` (new; moved from `scripts/`), `scripts/reconcile.ts`
+(wrapper), `src/config.ts` (error text), `tsconfig.build.json` (new), `package.json` + lockfile (name, bin, files,
+prepack, pins, 0.3.0), `.github/workflows/ci.yml` (pack-and-install), `.github/workflows/release.yml` (new),
+`scripts/release-check.sh` (new), `README.md` (install section, badges, script), `docs/` (BUILD_PLAN, TEST_CHECKLIST,
+RESULTS §15, DECISIONS D-032 + D-004 note, ARCHITECTURE, FLOW 6), `AGENTS.md`, `learn/task-15-publish.md`
 
 ## Environment (verified 2026-10-23)
 

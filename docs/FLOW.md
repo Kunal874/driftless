@@ -117,3 +117,18 @@ grows from 80 % to 100 % of the cap in under a minute beats `for: 1m` (size the 
    end LSN is confirmed. A crash at any point replays the whole transaction.
    - *Can break:* routing by id alone (fine for order, but needless waits across tables); applying a batch's tables
      to only one sink; a table removed from the config whose old changes still arrive (they're skipped, T13).
+
+---
+
+## Flow 6 — A release · ✅ built in T15 (D-032)
+
+1. Bump `package.json` to the new version in a commit `Release x.y.z`; CI must pass on it.
+2. Optional: Actions → Release → Run workflow: a dry run (both image architectures built, `npm publish --dry-run`).
+3. Tag `vx.y.z` on that commit and push the tag (owner's go-ahead). `release.yml`: typecheck + tests → the tag must
+   equal the package version → image for amd64 + arm64 to `ghcr.io/kunal874/driftless` (`x.y.z`, `x.y`, `latest`) →
+   `npm publish --provenance` through trusted publishing (skipped if the version is already on npm).
+4. Check it from outside: `scripts/release-check.sh x.y.z` (main stack stopped first).
+   - *Can break:* no trusted publisher on npmjs.com → the npm step fails after the image is out (fix it, re-run the
+     job: the image push repeats harmlessly). A tag that doesn't match the version → refused before anything is
+     pushed. An npm version can never be reused, even after an unpublish: a mistake means a new version.
+

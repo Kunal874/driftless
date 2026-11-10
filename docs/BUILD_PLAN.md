@@ -70,7 +70,7 @@ atomicity inside the index. High availability (stretch S2).
 | T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | ✅ |
 | T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | ✅ |
 | T14 | Alerts: slot WAL, connector down or stalled, lag (approved 2026-11-11) | 9 | ✅ |
-| T15 | Publish: image on GHCR, CLI on npm; release `v0.3.0` | 9 | approved 2026-11-11 |
+| T15 | Publish: image on GHCR, CLI on npm; release `v0.3.0` (approved 2026-11-11) | 9 | ✅ |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
 ---
@@ -530,7 +530,7 @@ live.
 
 ---
 
-## T15 — Publish: image on GHCR, CLI on npm; release `v0.3.0` (approved by the owner 2026-11-11)
+## T15 — Publish: image on GHCR, CLI on npm; release `v0.3.0` ✅ (approved by the owner 2026-11-11)
 
 **Goal:** use Driftless without cloning it: `docker run ghcr.io/kunal874/driftless:0.3.0` or `npx driftless-cdc`. Both are
 built by CI from a version tag and checked against a real stack after publishing.
@@ -581,7 +581,7 @@ built by CI from a version tag and checked against a real stack after publishing
       before a trusted publisher can be added), then the tag; the image was publicly pullable straight away (an
       anonymous GHCR token got HTTP 200), so no visibility change was needed. The trusted publisher is the owner's to
       add before the next release (0.3.0 didn't need it: the workflow skips a version already on npm)
-- [ ] T15.5 Verify from outside, on a throwaway stack (`COMPOSE_PROJECT_NAME=driftless-release`): the **published**
+- [x] T15.5 Verify from outside, on a throwaway stack (`COMPOSE_PROJECT_NAME=driftless-release`): the **published**
       image and the **published** CLI (`npx` in an empty folder) each backfill, survive a SIGKILL + restart, and
       reconcile to 0 → RESULTS §15. README badges; D-032;
       `learn/task-15-publish.md`; checkpoint

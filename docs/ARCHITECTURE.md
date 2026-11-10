@@ -124,7 +124,9 @@ driftless/
 ├── tsconfig.json           type-check only; Node 24 runs .ts files directly (T03)
 ├── tsconfig.build.json     emits dist/*.js for the npm package only: no type stripping in node_modules (T15, D-032)
 ├── .githooks/commit-msg    single-author guard (CONSTRAINTS rule 1)
-├── .github/workflows/ci.yml  every push: typecheck + unit tests, then scripts/ci-e2e.sh on a fresh stack (T11)
+├── .github/workflows/ci.yml  every push: typecheck + unit tests (+ promtool, + the npm package installed from its
+│                             tarball), then scripts/ci-e2e.sh on a fresh stack (T11, T14, T15)
+├── .github/workflows/release.yml  a `v*` tag: image (amd64 + arm64) to GHCR, package to npm; by hand: a dry run (T15)
 ├── db/                     all SQL (T02)
 │   ├── init/01-schema.sql    runs automatically on a fresh Postgres volume
 │   ├── seed.sql              generates N demo rows
@@ -141,7 +143,7 @@ driftless/
 │   └── cli.ts, cli-args.ts   the `driftless` command of the npm package: run, reconcile (T15)
 ├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts (wrapper + --self-test) + chaos.sh (T05),
 │                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08), bench-lag.ts (T09),
-│                           ci-e2e.sh (T11), redis-crash.sh (T12), alert-drill.sh (T14)
+│                           ci-e2e.sh (T11), redis-crash.sh (T12), alert-drill.sh (T14), release-check.sh (T15)
 ├── docker/                 prometheus/prometheus.yml + alerts.yml + alerts.test.yml (T09, T14), grafana/ provisioning +
 │                           dashboard JSON (T09)
 ├── docs/                   project docs (this folder)
