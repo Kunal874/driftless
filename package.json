@@ -1,6 +1,6 @@
 {
   "name": "driftless-cdc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "description": "Keeps Meilisearch indexes and a Redis cache in sync with PostgreSQL by reading the WAL (logical replication), with zero drift you can check.",
   "keywords": [

@@ -9,8 +9,8 @@ Solo project of the owner, Kunal, who is the only author. 6–8 weeks part-time.
 
 | | |
 |---|---|
-| Last checkpoint | **T14 — Alerts** (tag `checkpoint/T14`); last release `v0.2.0` (T13); `v0.3.0` = T14 + T15 |
-| Next step | **T15.1** — publish: image on GHCR, CLI on npm as `driftless-cdc` (approved 2026-11-11) |
+| Last checkpoint | **T14 — Alerts** (tag `checkpoint/T14`); `0.3.0` committed (T14 + T15), being published in T15.4; `v0.2.0` = T13 |
+| Next step | **T15.4** — first npm publish by the owner, then tag `v0.3.0` (each push with the owner's go-ahead) |
 | Blockers | none (BUILD_PLAN.md approved 2026-10-22) |
 
 ## Every session starts like this

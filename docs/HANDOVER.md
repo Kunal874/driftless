@@ -5,7 +5,8 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
 ## Current state
 
 - Last checkpoint: **T14 — Alerts** (tag `checkpoint/T14`).
-- Released: **`v0.2.0`** (T12–T13). `v0.3.0` will be T14 + T15. `v0.1.0` = T10.
+- Released: **`v0.2.0`** (T12–T13); `v0.1.0` = T10. **`0.3.0` is committed** (version bump, T14 + T15) but not yet
+  published or tagged: the owner's npm account exists (2026-11-11); next comes the first publish by hand.
 - Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `9bab400` (T15.3), pushed
   2026-11-11 with the owner's go-ahead; CI run 42904503784 green: unit job (incl. promtool + the npm pack-and-install
   check, both for the first time on GitHub) and e2e (24,100 multi tx, 10 SIGKILLs, both tables × both sinks 0 drift,
@@ -31,10 +32,13 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   green in 56 s: typecheck + tests, both `linux/amd64` and `linux/arm64` built all 6 Dockerfile steps with
   `push: false`, `npm publish --dry-run` packed the 21 files; tag check and GHCR login skipped as designed. Afterwards
   `npm view driftless-cdc` → 404: nothing published. The image's `description` label comes from the GitHub repo
-  description, which still says Meilisearch only (the owner may update it). Still to do, each with the owner's go-ahead:
-  the owner's npm account; the version bump to 0.3.0; the first npm publish
-  (by hand if trusted publishing needs the package to exist) + the trusted publisher; tag `v0.3.0`; the owner makes
-  the GHCR package public.
+  description, which still says Meilisearch only (the owner may update it). The owner's npm account exists; the version
+  bump to 0.3.0 is committed. npm requires a package to exist before a trusted publisher can be added (no "pending
+  publisher" as on PyPI), so the first publish is by hand. Still to do, in this order: (1) the owner runs `npm login` and
+  `npm publish --access public` from a clean checkout of the release commit; (2) the owner adds the trusted publisher
+  on npmjs.com (GitHub Actions, `Kunal874/driftless`, `release.yml`); (3) push `main` + tag `v0.3.0` (owner's
+  go-ahead): the workflow pushes the image and skips npm (0.3.0 already there). Pushing the tag BEFORE (1) would fail
+  the npm step (no trusted publisher yet); (4) the owner makes the GHCR package public.
 - Next step: **T15.4** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
