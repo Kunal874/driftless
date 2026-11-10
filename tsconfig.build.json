@@ -1,0 +1,14 @@
+{
+  // The npm package only (T15, D-032): Node won't strip types from files inside node_modules, so the package ships
+  // JavaScript. `rewriteRelativeImportExtensions` turns './config.ts' into './config.js'. The repo and the image keep
+  // running src/*.ts directly (D-004).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

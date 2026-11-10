@@ -31,7 +31,8 @@
   "scripts": {
     "start": "node src/main.ts",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@redis/client": "6.3.0",

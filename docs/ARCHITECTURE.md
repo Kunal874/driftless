@@ -122,6 +122,7 @@ driftless/
 ├── docker-compose.yml      local stack (connector built from the Dockerfile; Prometheus/Grafana in T09)
 ├── package.json            scripts + dependencies (T03)
 ├── tsconfig.json           type-check only; Node 24 runs .ts files directly (T03)
+├── tsconfig.build.json     emits dist/*.js for the npm package only: no type stripping in node_modules (T15, D-032)
 ├── .githooks/commit-msg    single-author guard (CONSTRAINTS rule 1)
 ├── .github/workflows/ci.yml  every push: typecheck + unit tests, then scripts/ci-e2e.sh on a fresh stack (T11)
 ├── db/                     all SQL (T02)
@@ -135,8 +136,10 @@ driftless/
 │   ├── source/               replication.ts, decode.ts, lsn.ts (T03); backfill.ts (T07); ack-contract.test.ts (T11)
 │   ├── sinks/                document.ts, meilisearch.ts (T04); sink.ts, redis.ts (T12)
 │   ├── pipeline/             lanes.ts, checkpointer.ts (T06), backpressure.ts (T08)
-│   └── metrics.ts            Prometheus metrics + GET /metrics (T09)
-├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05),
+│   ├── metrics.ts            Prometheus metrics + GET /metrics (T09)
+│   ├── reconcile.ts          every row vs every sink; moved from scripts/ (T05, T15)
+│   └── cli.ts, cli-args.ts   the `driftless` command of the npm package: run, reconcile (T15)
+├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts (wrapper + --self-test) + chaos.sh (T05),
 │                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08), bench-lag.ts (T09),
 │                           ci-e2e.sh (T11), redis-crash.sh (T12), alert-drill.sh (T14)
 ├── docker/                 prometheus/prometheus.yml + alerts.yml + alerts.test.yml (T09, T14), grafana/ provisioning +

@@ -564,7 +564,7 @@ built by CI from a version tag and checked against a real stack after publishing
 - **Package contents:** `files: ["dist", "README.md", "LICENSE"]`, `private` removed, `prepack` runs the build. Review
   `npm pack --dry-run` for anything that shouldn't ship (config, `.env`, tests, `scripts/`).
 
-- [ ] T15.1 `src/cli.ts` + reconcile moved into `src/` (wrapper left in `scripts/`); unit test for argument parsing;
+- [x] T15.1 `src/cli.ts` + reconcile moved into `src/` (wrapper left in `scripts/`); unit test for argument parsing;
       `tsconfig.build.json`, `npm run build`; `dist/` gitignored. `npm test` and the CI e2e still pass unchanged
 - [ ] T15.2 `package.json` for publishing (name, `bin`, `files`, `prepack`, no `private`); config error text no longer
       assumes the repo root. Smoke test of the **packed tarball**, installed in an empty folder: `driftless --version`;

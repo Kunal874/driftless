@@ -10,7 +10,12 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   `pg-logical-replication` 2.6.0 upgrade, a recorded D-017 exception). **Everything from the T14/T15 plan on is local,
   not pushed**: push only with the owner's go-ahead. CI's new promtool step has therefore not run on GitHub yet.
 - **Approved 2026-11-11:** T15 (publish the image to GHCR and the CLI to npm as `driftless-cdc`, release `v0.3.0`).
-- Next step: **T15.1** (BUILD_PLAN.md).
+- **T15 in progress.** T15.1 ✅: `src/cli.ts` (entry) + `src/cli-args.ts` (`parseCli`, tested; `--self-test` refused);
+  reconcile moved to `src/reconcile.ts` as `reconcile({ timeoutS, selfTest })`, with `scripts/reconcile.ts` as the
+  wrapper every script still calls; `tsconfig.build.json` + `npm run build` → `dist/` (gitignored). `import.meta.main`
+  avoided on purpose (only newer Node 24 releases have it), hence the two files. `npm test` 75/75; CI e2e locally
+  (`driftless-ci`, removed afterwards): 24,380 tx, 10 SIGKILLs, 0 drift, self-test passed.
+- Next step: **T15.2** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
