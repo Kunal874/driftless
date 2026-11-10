@@ -343,6 +343,38 @@ changes and cross-table transactions (`BEGIN; UPDATE products …; UPDATE custom
 would have restarted the finished table on every restart: a livelock under repeated kills. Fixed before the race ran
 (resume beats request across tables; a requested round marks every table as due). The race above is the proof.
 
+## 14. Alerts fire for real (T14)
+
+2026-11-11, the main stack (~297k–300k products + ~21k customers) with the `metrics` profile: Prometheus 3.15.0
+(`evaluation_interval` 15 s, scrape 5 s) loading `docker/prometheus/alerts.yml`, Grafana 13.2.3. **Command:**
+`scripts/alert-drill.sh down|stalled|slot [RATE]`. Times are from the cause (kill, freeze, WAL step) to the alert's
+state in Prometheus's `/api/v1/alerts`, polled every 5 s.
+
+| Drill | Cause | Pending after | Firing after | Resolved after the cause was undone | Data |
+|---|---|---|---|---|---|
+| `down` | connector SIGKILLed, left down | 31 s | **2 min 30 s** (`for: 2m`) | 10 s after the restart | (none flowed) |
+| `stalled 200` | Meilisearch `docker pause`d under 200 tx/s | 2 min 31 s | **5 min 26 s** (2 min window + `for: 3m`) | 31 s after unpausing | 119,723 tx (0 failed); both tables × both sinks **0 / 0 / 0** |
+| `slot 50`, 1 GB cap ¹ | Meilisearch paused under 50 tx/s; WAL grown to 60 %, then 85 % of the cap | High 16 s after 60 % | **High 5 min 19 s after 60 %; Critical 88 s after 85 %** (pending 26 s, then `for: 1m`; peak 87 %, slot `reserved`) | both 57 s after unpausing | 35,814 tx (0 failed); **0 / 0 / 0** |
+| `slot 50`, 256 MB cap | the same, with Postgres recreated at `max_slot_wal_keep_size=256MB` | High 26 s after 62 % | **High 5 min 24 s after 62 %; Critical 56 s after 87 %** (peak 90 %, slot `reserved`) | Critical 47 s, High 57 s after unpausing | 36,004 tx (0 failed); **0 / 0 / 0** |
+
+¹ Unplanned: the first slot run meant to use 256 MB, but the drill's `docker compose up -d connector` recreated
+Postgres from its compose model (1 GB) because the running container's config differed. Fixed with `--no-deps` plus a
+check that the cap really is 256 MB; the rerun is the last row. The 1 GB run still counts: it is the shipped config.
+
+- **Every alert fired, and none fired early:** each went pending once its condition held and fired only after its `for:`.
+  During `stalled` and `slot`, `DriftlessStalled` fired as well (Meilisearch frozen under load is exactly that case).
+- **The dashboard shows them:** the "Alerts: pending and firing" panel listed `DriftlessStalled` (firing, critical,
+  `connector:9464`) during the stalled drill, and `Stalled`, `SlotWalHigh` and `SlotWalCritical` during the slot drill.
+- **The WAL is grown with `pg_logical_emit_message`** (8 MB per step): WAL that Driftless never receives (it doesn't ask
+  pgoutput for messages), so the slot's share of the cap can be set without touching the data.
+- **How exact the share is** (`retained + safe` vs the cap): at 256 MB, sampled 3× with the slot holding 1–179 MB, it was
+  the cap + 10,281,448 bytes every time; at 1 GB (one sample, T14.1) the cap + 11,345,720. Postgres counts the cap from a 16 MB WAL segment
+  boundary, so the alerts' share reads 1–4 % low: the slot is lost when it shows ~96 % at 256 MB, ~99 % at 1 GB. The
+  margin between 80 % and loss is what `for: 1m` spends.
+- **Margin seen:** at 50 tx/s with Meilisearch frozen, the WAL kept growing ~3 % of a 256 MB cap per minute after the
+  last step, so the minute Critical waited took it from 87 % to 90 %. A smaller cap or a faster-growing WAL
+  leaves less time: size the cap so that 20 % of it is more than a few minutes of your WAL.
+
 ---
 
 ## Resume claims: status
@@ -354,4 +386,5 @@ would have restarted the finished table on every restart: a livelock under repea
 | Lanes + batching raised throughput from [A] to [B] | **measured**: 9 → 6,752 transactions/s (backlog drain on a ~105k-document index, §4); the same command gives 2,810 tx/s on a 195k-document index (§4 note, §9) |
 | A cache that is never stale (T12) | **measured (§12)**: the Redis cache stays exact under connector SIGKILLs (11 kills, 0 drift over 282,154 rows) and under a **Redis SIGKILL** with `appendfsync always` (0 drift). With Redis's default persistence the same crash left **6,238 wrong keys** (4,143 rolled back to older values). Redis adds ~0.15 s of lag at 1,000 tx/s |
 | Several tables, cross-table transactions (T13) | **measured (§13)**: two tables (290k + 20k rows) × two sinks stay exact through 11 SIGKILLs with cross-table transactions, a backfill race with 7 SIGKILLs, and adding, removing and re-adding a table on a running deployment |
+| Alerts that fire before damage (T14) | **measured (§14)**: connector down → alert in 2.5 min; stalled sink under load → 5.4 min; slot WAL → warning at 60 % and critical at 87 % of the cap, both before the slot was lost, at a 1 GB and a 256 MB cap; 0 drift after each drill |
 | Debugging story | BUG-001 (library ack off-by-one); **BUG-002** (backfill race: 42 docs wrong → fixed with watermarks); **BUG-003** (the watermark algorithm assumed full row images; Postgres omits unchanged TOAST → 1 doc → 0) |

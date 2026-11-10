@@ -506,11 +506,12 @@ live.
 - [x] T14.3 CI: `promtool check rules` + `promtool test rules` in the unit job, run from the pinned
       `prom/prometheus:v3.15.0` image (no new dependency)
 - [x] T14.4 Dashboard panel "Firing alerts" (built as "Alerts: pending and firing", a table of `ALERTS`)
-- [ ] T14.5 Live proofs → RESULTS §14: (a) `docker compose kill connector` → `DriftlessDown` fires, then resolves after
-      a restart; (b) `docker pause meilisearch` under load → `DriftlessStalled`; (c) the cap lowered to 64 MB with
-      `ALTER SYSTEM` (as in T08.4), Meilisearch paused under load → `SlotWalHigh`, then `SlotWalCritical` *before* the
-      slot is lost; then reset the cap, unpause, reconcile → 0 drift; (d) record how close `retained + safe` is to the
-      cap
+- [x] T14.5 Live proofs → RESULTS §14: (a) `docker compose kill connector` → `DriftlessDown` fires, then resolves after
+      a restart; (b) `docker pause meilisearch` under load → `DriftlessStalled`; (c) the cap lowered to 256 MB
+      (Postgres recreated with `PG_MAX_SLOT_WAL_KEEP_SIZE`: a `-c` setting beats `ALTER SYSTEM`, so T08.4's way no
+      longer works), Meilisearch paused under load, the WAL grown in steps with `pg_logical_emit_message` →
+      `SlotWalHigh`, then `SlotWalCritical` *before* the slot is lost; then unpause, reconcile → 0 drift, cap back to
+      1 GB; (d) record how close `retained + safe` is to the cap. All three: `scripts/alert-drill.sh down|stalled|slot`
 - [ ] T14.6 README (monitoring: the alerts, using the rule file with your own Prometheus, the job label), ARCHITECTURE,
       FLOW, D-031, `learn/task-14-alerts.md`, checkpoint
 
@@ -523,8 +524,9 @@ live.
   connector.
 - A new alert needs its `for:` plus up to one evaluation interval before it fires. Wait for it; don't shorten `for:`
   to make a test pass.
-- With the cap at 64 MB, a Meilisearch pause that runs too long *will* lose the slot, and recovery is a full backfill
-  (D-026). Stop at `SlotWalCritical`; that's the proof. Reset the cap afterwards (`ALTER SYSTEM RESET`, as in T08.4).
+- With a lowered cap, a Meilisearch pause that runs too long *will* lose the slot, and recovery is a full backfill
+  (D-026). The drill grows the WAL in controlled steps and stops at `SlotWalCritical` (~85 %); that's the proof. Put
+  the 1 GB cap back afterwards (recreate `postgres` without the variable).
 
 ---
 

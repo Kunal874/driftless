@@ -23,7 +23,12 @@ describes *now*; history lives in git.
   Passed locally with the same commands; **not yet run on GitHub** (nothing pushed since `2c39d55`).
 - T14.4 ✅: dashboard panel "Alerts: pending and firing" (table of `ALERTS{alertname=~"Driftless.*"}`) on top; the
   other panels moved down 5 rows. Seen with alerts in it: during T14.5.
-- Next step: **T14.5** (BUILD_PLAN.md).
+- T14.5 ✅ (RESULTS §14): `scripts/alert-drill.sh down|stalled|slot`. Down fired 2 min 30 s after a SIGKILL; Stalled
+  5 min 26 s after freezing Meilisearch under 200 tx/s; SlotWalHigh/Critical at 60 % and 87 % of the cap, before the
+  slot was lost, at 1 GB and at 256 MB; every alert resolved; 0 drift after each drill. The first slot run fell back to
+  1 GB (`docker compose up connector` recreated Postgres from its model): fixed with `--no-deps` + a cap check.
+  The stack is back to normal: cap 1 GB, slot `reserved`; prometheus + grafana running.
+- Next step: **T14.6** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
