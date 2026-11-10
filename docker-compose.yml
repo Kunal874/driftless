@@ -11,7 +11,8 @@ services:
     # max_slot_wal_keep_size caps the WAL a replication slot may hold (default: unlimited). Without it, a
     # Driftless that's down for long enough fills this disk and stops Postgres itself. With it, Postgres gives the
     # slot up instead, and Driftless refuses to start with recovery steps (T08.4, docs/ROLLBACK.md).
-    command: ["postgres", "-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=1GB"]
+    # PG_MAX_SLOT_WAL_KEEP_SIZE exists only for the alert experiments (T14.5): a -c setting beats ALTER SYSTEM.
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=${PG_MAX_SLOT_WAL_KEEP_SIZE:-1GB}"]
     environment:
       POSTGRES_USER: driftless
       POSTGRES_PASSWORD: driftless

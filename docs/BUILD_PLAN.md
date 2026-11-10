@@ -498,7 +498,7 @@ live.
   showing `ALERTS{alertname=~"Driftless.*"}`. Sending them to Slack, email or a pager is the job of the user's own
   Alertmanager. The demo stack gets no Alertmanager container; add one if local notifications are ever wanted.
 
-- [ ] T14.1 The gauge `driftless_slot_safe_wal_bytes` (the same query as the retained gauge); a startup warning when
+- [x] T14.1 The gauge `driftless_slot_safe_wal_bytes` (the same query as the retained gauge); a startup warning when
       `max_slot_wal_keep_size` is unlimited. Check both live (`GET /metrics`; a stack started without the cap)
 - [ ] T14.2 `docker/prometheus/alerts.yml` + `rule_files` and `evaluation_interval: 15s` in `prometheus.yml`;
       `docker/prometheus/alerts.test.yml` for `promtool test rules`: every alert fires on its synthetic series and

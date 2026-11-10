@@ -256,20 +256,23 @@ gaugeOf('driftless_txns_in_flight', 'Transactions received but not yet confirmab
 gaugeOf('driftless_reading_paused', '1 while backpressure has paused reading the stream', () => (readingPaused ? 1 : 0));
 gaugeOf('driftless_confirmed_lsn', 'WAL position confirmed to Postgres, as a number (rate() = bytes/s)',
   () => Number(confirmed));
-// How much WAL Postgres keeps for this slot: what a stalled Driftless costs the database (cap: 1 GB, D-026).
+// How much WAL Postgres keeps for this slot (what a stalled Driftless costs the database), and how much more it may
+// keep before it invalidates the slot (cap: 1 GB, D-026). The slot alerts use retained / (retained + safe) (T14).
 const metricsDb = new pg.Pool({ ...config.pgConfig, max: 1 });
 metricsDb.on('error', () => {}); // an idle connection dropped: the next scrape reconnects
+async function slotBytes(column: string): Promise<number> {
+  try {
+    const { rows } = await metricsDb.query(
+      `SELECT (${column})::float8 AS bytes FROM pg_replication_slots WHERE slot_name = $1`, [config.slot]);
+    return rows[0]?.bytes ?? NaN; // NULL (e.g. safe_wal_size without a cap) → NaN
+  } catch {
+    return NaN; // Postgres unreachable: report "unknown", don't fail the whole scrape
+  }
+}
 gaugeOf('driftless_slot_retained_wal_bytes', 'WAL Postgres keeps for the slot (current position − restart_lsn)',
-  async () => {
-    try {
-      const { rows } = await metricsDb.query(
-        `SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::float8 AS bytes
-           FROM pg_replication_slots WHERE slot_name = $1`, [config.slot]);
-      return rows[0]?.bytes ?? NaN;
-    } catch {
-      return NaN; // Postgres unreachable: report "unknown", don't fail the whole scrape
-    }
-  });
+  () => slotBytes('pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)'));
+gaugeOf('driftless_slot_safe_wal_bytes', 'WAL Postgres may still write before it invalidates the slot (NaN = no cap)',
+  () => slotBytes('safe_wal_size'));
 serveMetrics(config.metricsServer.host, config.metricsServer.port).on('error', fail);
 
 function fail(err: unknown): never {

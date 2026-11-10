@@ -11,7 +11,11 @@ describes *now*; history lives in git.
 - `pg-logical-replication` upgraded to 2.6.0 (2026-10-24, a recorded D-017 exception, commit `2c39d55`, pushed):
   `sendStatus` passes `end` unchanged, the contract test expects that, and the BUG-001 repro now adds the 1 itself.
 - **Approved 2026-11-11:** T14 (alerts) and T15 (publish to GHCR + npm as `driftless-cdc`, release `v0.3.0`).
-- Next step: **T14.1** (BUILD_PLAN.md).
+- **T14 in progress.** T14.1 ✅: gauge `driftless_slot_safe_wal_bytes` (Postgres's `safe_wal_size`, NaN without a cap);
+  a startup warning when `max_slot_wal_keep_size` is unlimited (checked live with `PG_MAX_SLOT_WAL_KEEP_SIZE=-1`).
+  Compose now reads the cap from `PG_MAX_SLOT_WAL_KEEP_SIZE` (default `1GB`): a `-c` setting beats `ALTER SYSTEM`, so
+  T14.5 lowers the cap by recreating `postgres` with that variable, not with `ALTER SYSTEM` as T08.4 did.
+- Next step: **T14.2** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now

@@ -64,6 +64,14 @@ export async function ensureReplicationSetup(
   if (found.wal_status === 'unreserved') {
     console.warn(`driftless: slot ${slot} holds ${found.held} of WAL, past max_slot_wal_keep_size: it will be invalidated soon`);
   }
+  // T14: without a cap, a stopped Driftless makes Postgres keep WAL until its disk is full (D-026), and the slot-WAL
+  // alerts can't fire (they measure the share of the cap in use).
+  const { rows: [{ max_slot_wal_keep_size: cap }] } = await db.query<{ max_slot_wal_keep_size: string }>(
+    'SHOW max_slot_wal_keep_size');
+  if (cap === '-1') {
+    console.warn(`driftless: max_slot_wal_keep_size is unlimited: if Driftless stops, slot ${slot} keeps WAL until ` +
+      `Postgres's disk is full. Set a cap, e.g. max_slot_wal_keep_size = 1GB (README → Observability)`);
+  }
   return found.confirmed_flush_lsn;
 }
 
