@@ -24,7 +24,7 @@ function readConfigFile(path: string): unknown {
   try {
     text = readFileSync(path, 'utf8');
   } catch (err) {
-    throw new Error(`can't read the config file (${(err as NodeJS.ErrnoException).code ?? (err as Error).message}); run from the repo root or set DRIFTLESS_CONFIG`);
+    throw new Error(`can't read the config file (${(err as NodeJS.ErrnoException).code ?? (err as Error).message}); run where it is, pass --config <file> (the driftless command) or set DRIFTLESS_CONFIG`);
   }
   try {
     return JSON.parse(text);

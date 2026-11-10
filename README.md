@@ -86,6 +86,32 @@ flowchart LR
 The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), every choice and its reason in
 [docs/DECISIONS.md](docs/DECISIONS.md), and step-by-step flows in [docs/FLOW.md](docs/FLOW.md).
 
+## Use it with your own database
+
+Write a [config file](#configuration) for your tables, then run Driftless as a container (amd64 and arm64):
+
+```bash
+docker run -d --name driftless --restart unless-stopped -v "$PWD/driftless.config.json:/app/driftless.config.json:ro" -e PGPASSWORD -e MEILI_MASTER_KEY -e REDIS_PASSWORD -e DRIFTLESS_METRICS_HOST=0.0.0.0 -p 127.0.0.1:9464:9464 ghcr.io/kunal874/driftless:0.3.0
+```
+
+Or with Node.js ≥ 24, from npm (package `driftless-cdc`, command `driftless`):
+
+```bash
+npx driftless-cdc --config driftless.config.json
+```
+
+Check every row against its document and cache entry at any time (read-only; exit code 0 = no drift):
+
+```bash
+npx driftless-cdc reconcile --config driftless.config.json
+```
+
+- Secrets come from the environment only (`PGPASSWORD`, `MEILI_MASTER_KEY`, `REDIS_PASSWORD`), never from the file.
+- Inside a container, `127.0.0.1` is the container itself: put real host names in the config.
+- Run one Driftless per replication slot, and restart it when it exits (`--restart`, systemd, …): it stops on purpose
+  when something needs a person, and resumes from the slot when started.
+- Set `max_slot_wal_keep_size` on Postgres and use the [alerts](#observability).
+
 ## Quick start
 
 Needs Docker (with Compose v2), Node.js ≥ 24 and bash (on Windows: Git Bash).

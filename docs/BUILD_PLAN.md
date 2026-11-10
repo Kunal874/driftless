@@ -566,10 +566,12 @@ built by CI from a version tag and checked against a real stack after publishing
 
 - [x] T15.1 `src/cli.ts` + reconcile moved into `src/` (wrapper left in `scripts/`); unit test for argument parsing;
       `tsconfig.build.json`, `npm run build`; `dist/` gitignored. `npm test` and the CI e2e still pass unchanged
-- [ ] T15.2 `package.json` for publishing (name, `bin`, `files`, `prepack`, no `private`); config error text no longer
+- [x] T15.2 `package.json` for publishing (name, `bin`, `files`, `prepack`, no `private`); config error text no longer
       assumes the repo root. Smoke test of the **packed tarball**, installed in an empty folder: `driftless --version`;
       `driftless` streams against the dev stack; `driftless reconcile` → 0. The same pack-and-install check in CI (a
-      bad config → exit 2 proves every module resolves)
+      bad config → exit 2 proves every module resolves). *Added while doing it:* the README section "Use it with your
+      own database" (moved here from T15.5: npm shows the README *from the published tarball*, so it must be in before
+      the tag), and the direct dependencies pinned exactly (an npm install ignores our lockfile)
 - [ ] T15.3 `release.yml` (image + npm) with a `workflow_dispatch` dry run: build both architectures and run
       `npm publish --dry-run`, pushing nothing. Actions pinned per D-017
 - [ ] T15.4 Owner steps, each only with the owner's go-ahead: the npm account and trusted publisher; push; the dry run
@@ -577,7 +579,7 @@ built by CI from a version tag and checked against a real stack after publishing
       container packages as private)
 - [ ] T15.5 Verify from outside, on a throwaway stack (`COMPOSE_PROJECT_NAME=driftless-release`): the **published**
       image and the **published** CLI (`npx` in an empty folder) each backfill, survive a SIGKILL + restart, and
-      reconcile to 0 → RESULTS §15. README "Install" section (docker run, npx) and badges; D-032;
+      reconcile to 0 → RESULTS §15. README badges; D-032;
       `learn/task-15-publish.md`; checkpoint
 
 **Dependencies (approved by the owner 2026-11-11):** Docker's official GitHub Actions `docker/setup-qemu-action`,

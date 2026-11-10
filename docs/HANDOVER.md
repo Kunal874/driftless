@@ -15,7 +15,12 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   wrapper every script still calls; `tsconfig.build.json` + `npm run build` → `dist/` (gitignored). `import.meta.main`
   avoided on purpose (only newer Node 24 releases have it), hence the two files. `npm test` 75/75; CI e2e locally
   (`driftless-ci`, removed afterwards): 24,380 tx, 10 SIGKILLs, 0 drift, self-test passed.
-- Next step: **T15.2** (BUILD_PLAN.md).
+- T15.2 ✅: package `driftless-cdc` (bin `driftless`, `files: ["dist"]`, `prepack` builds, `private` gone, direct
+  dependencies pinned exactly); the tarball holds only `dist/`, README, LICENSE, package.json (36.6 kB). Smoke test of
+  the packed tarball in an empty folder: version, bad config → exit 2 (run and reconcile), then it **streamed** 4,168
+  multi transactions against the dev stack and `npx driftless reconcile` → 0 drift. CI's unit job repeats the
+  pack-and-install check. README: "Use it with your own database" (docker run, npx).
+- Next step: **T15.3** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now

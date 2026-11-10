@@ -1,9 +1,8 @@
 {
-  "name": "driftless",
+  "name": "driftless-cdc",
   "version": "0.2.0",
   "license": "MIT",
-  "private": true,
-  "description": "Keeps a Meilisearch index in sync with PostgreSQL by reading the WAL (logical replication).",
+  "description": "Keeps Meilisearch indexes and a Redis cache in sync with PostgreSQL by reading the WAL (logical replication), with zero drift you can check.",
   "keywords": [
     "postgresql",
     "meilisearch",
@@ -13,7 +12,9 @@
     "wal",
     "search",
     "sync",
-    "typescript"
+    "typescript",
+    "redis",
+    "cli"
   ],
   "homepage": "https://github.com/Kunal874/driftless#readme",
   "repository": {
@@ -32,19 +33,26 @@
     "start": "node src/main.ts",
     "typecheck": "tsc",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@redis/client": "6.3.0",
-    "meilisearch": "^0.62.0",
-    "pg": "^8.23.1",
+    "meilisearch": "0.62.0",
+    "pg": "8.23.1",
     "pg-logical-replication": "2.6.0",
-    "prom-client": "^15.1.3"
+    "prom-client": "15.1.3"
   },
   "devDependencies": {
     "@types/node": "^24.19.1",
     "@types/pg": "^8.23.1",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
-  }
+  },
+  "bin": {
+    "driftless": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ]
 }

@@ -29,6 +29,16 @@ jobs:
           promtool() { docker run --rm -v "$PWD/docker/prometheus:/rules:ro" --entrypoint promtool prom/prometheus:v3.15.0 "$@"; }
           promtool check config /rules/prometheus.yml
           promtool test rules /rules/alerts.test.yml
+      - name: The npm package works once installed (Node won't strip types inside node_modules, T15)
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP" && npm init -y >/dev/null && npm install ./driftless-cdc-*.tgz
+          npx driftless --version
+          # A config error (exit 2) comes after every module has loaded, so it proves the package is complete.
+          for command in "" reconcile; do
+            status=0; npx driftless $command --config missing.json || status=$?
+            test "$status" -eq 2
+          done
 
   e2e:
     name: End to end (backfill, SIGKILL chaos, reconcile = 0)
