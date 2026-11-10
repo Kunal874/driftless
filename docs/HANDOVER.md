@@ -21,7 +21,9 @@ describes *now*; history lives in git.
   exactly, so each alert has one templated `summary` only.
 - T14.3 ✅: the CI unit job runs `promtool check config` + `promtool test rules` from `prom/prometheus:v3.15.0`.
   Passed locally with the same commands; **not yet run on GitHub** (nothing pushed since `2c39d55`).
-- Next step: **T14.4** (BUILD_PLAN.md).
+- T14.4 ✅: dashboard panel "Alerts: pending and firing" (table of `ALERTS{alertname=~"Driftless.*"}`) on top; the
+  other panels moved down 5 rows. Seen with alerts in it: during T14.5.
+- Next step: **T14.5** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now

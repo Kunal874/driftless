@@ -505,7 +505,7 @@ live.
       stays silent on a healthy one, including no traffic (no lag alert) and an idle connector (no stall alert)
 - [x] T14.3 CI: `promtool check rules` + `promtool test rules` in the unit job, run from the pinned
       `prom/prometheus:v3.15.0` image (no new dependency)
-- [ ] T14.4 Dashboard panel "Firing alerts"
+- [x] T14.4 Dashboard panel "Firing alerts" (built as "Alerts: pending and firing", a table of `ALERTS`)
 - [ ] T14.5 Live proofs → RESULTS §14: (a) `docker compose kill connector` → `DriftlessDown` fires, then resolves after
       a restart; (b) `docker pause meilisearch` under load → `DriftlessStalled`; (c) the cap lowered to 64 MB with
       `ALTER SYSTEM` (as in T08.4), Meilisearch paused under load → `SlotWalHigh`, then `SlotWalCritical` *before* the
