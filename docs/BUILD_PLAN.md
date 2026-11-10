@@ -572,8 +572,9 @@ built by CI from a version tag and checked against a real stack after publishing
       bad config → exit 2 proves every module resolves). *Added while doing it:* the README section "Use it with your
       own database" (moved here from T15.5: npm shows the README *from the published tarball*, so it must be in before
       the tag), and the direct dependencies pinned exactly (an npm install ignores our lockfile)
-- [ ] T15.3 `release.yml` (image + npm) with a `workflow_dispatch` dry run: build both architectures and run
-      `npm publish --dry-run`, pushing nothing. Actions pinned per D-017
+- [x] T15.3 `release.yml` (image + npm) with a `workflow_dispatch` dry run: build both architectures and run
+      `npm publish --dry-run`, pushing nothing. Actions pinned per D-017 (by commit SHA; `login-action` v4.7.0, since
+      v4.8.0 was 6 days old)
 - [ ] T15.4 Owner steps, each only with the owner's go-ahead: the npm account and trusted publisher; push; the dry run
       on GitHub; tag `v0.3.0` → the workflow publishes; the owner makes the GHCR package public (GitHub creates new
       container packages as private)

@@ -1,0 +1,74 @@
+# Release (T15, D-032). A version tag (v0.3.0, …) publishes the image to ghcr.io/kunal874/driftless and the CLI to npm
+# as driftless-cdc. Run it by hand (Actions → Release → Run workflow) for a dry run: it builds the image for both
+# architectures and runs `npm publish --dry-run`, and publishes nothing.
+# Tag only a commit whose CI run (ci.yml: unit + end-to-end) passed; this workflow re-runs only the fast checks.
+# Third-party actions are pinned to a commit (a tag can be moved), each at least 14 days old when chosen (D-017).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish (or dry run)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push the image with this workflow's own GITHUB_TOKEN: no stored secret
+      id-token: write # npm trusted publishing (OIDC) and provenance: no stored npm token
+    env:
+      PUBLISH: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: The tag must equal the package.json version
+        if: env.PUBLISH == 'true'
+        run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/kunal874/driftless # GHCR names must be lower-case
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ env.PUBLISH == 'true' }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }} # includes org.opencontainers.image.source: links the package to the repo
+
+      - name: npm (a dry run unless this is a version tag)
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [ "$PUBLISH" != true ]; then
+            npm publish --dry-run
+          elif [ -n "$(npm view "driftless-cdc@$version" version 2>/dev/null)" ]; then
+            echo "driftless-cdc@$version is already on npm (e.g. the first release, published by hand): skipped"
+          else
+            npm publish --access public --provenance
+          fi

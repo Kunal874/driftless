@@ -20,7 +20,13 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   the packed tarball in an empty folder: version, bad config → exit 2 (run and reconcile), then it **streamed** 4,168
   multi transactions against the dev stack and `npx driftless reconcile` → 0 drift. CI's unit job repeats the
   pack-and-install check. README: "Use it with your own database" (docker run, npx).
-- Next step: **T15.3** (BUILD_PLAN.md).
+- T15.3 ✅: `.github/workflows/release.yml`: on `v*` tags typecheck + tests, tag = package version, image for
+  amd64 + arm64 to `ghcr.io/kunal874/driftless` (`<version>`, `<major>.<minor>`, `latest`), then `npm publish
+  --provenance` (skipped if that version is already on npm); by hand (`workflow_dispatch`) a dry run that pushes
+  nothing. Docker actions pinned by SHA: setup-qemu v4.4.0, setup-buildx v4.4.1, login v4.7.0 (v4.8.0 was 6 days old),
+  metadata v6.2.0, build-push v7.4.0. Checked locally: YAML parses, `npm publish --dry-run`, an arm64 build runs
+  (`aarch64`, module graph loads). **The workflow itself has not run on GitHub** (nothing pushed).
+- Next step: **T15.4**: owner steps, each with the owner's go-ahead (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
