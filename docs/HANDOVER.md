@@ -5,8 +5,10 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
 ## Current state
 
 - Last checkpoint: **T14 — Alerts** (tag `checkpoint/T14`).
-- Released: **`v0.2.0`** (T12–T13); `v0.1.0` = T10. **`0.3.0` is committed** (version bump, T14 + T15) but not yet
-  published or tagged: the owner's npm account exists (2026-11-11); next comes the first publish by hand.
+- Released: **`v0.2.0`** (T12–T13); `v0.1.0` = T10. **`driftless-cdc@0.3.0` is on npm** (published by the owner by
+  hand, 2026-11-11 21:39 UTC, maintainer `kunalchandrakar`). Its shasum `2eb34f41…` equals a local pack of the release
+  commit `cd3dca7` (21 files). `npx driftless-cdc@0.3.0` from an empty folder: `--version` → 0.3.0, reconcile of the
+  dev stack → 0 drift. Not yet: the image, the tag `v0.3.0`.
 - Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `9bab400` (T15.3), pushed
   2026-11-11 with the owner's go-ahead; CI run 42904503784 green: unit job (incl. promtool + the npm pack-and-install
   check, both for the first time on GitHub) and e2e (24,100 multi tx, 10 SIGKILLs, both tables × both sinks 0 drift,
@@ -34,8 +36,8 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
   `npm view driftless-cdc` → 404: nothing published. The image's `description` label comes from the GitHub repo
   description, which still says Meilisearch only (the owner may update it). The owner's npm account exists; the version
   bump to 0.3.0 is committed. npm requires a package to exist before a trusted publisher can be added (no "pending
-  publisher" as on PyPI), so the first publish is by hand. Still to do, in this order: (1) the owner runs `npm login` and
-  `npm publish --access public` from a clean checkout of the release commit; (2) the owner adds the trusted publisher
+  publisher" as on PyPI), so the first publish is by hand. Still to do, in this order: (1) ✅ the owner published 0.3.0 by
+  hand; (2) the owner adds the trusted publisher
   on npmjs.com (GitHub Actions, `Kunal874/driftless`, `release.yml`); (3) push `main` + tag `v0.3.0` (owner's
   go-ahead): the workflow pushes the image and skips npm (0.3.0 already there). Pushing the tag BEFORE (1) would fail
   the npm step (no trusted publisher yet); (4) the owner makes the GHCR package public.
@@ -98,6 +100,9 @@ Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes
     resolved; 0 drift after each. `npm test` 70/70.
 
 ## Ideas, if the owner wants more (none started)
+
+- `prom-client` is deprecated on npm (replaced by `@prometheus-io/client`); every `npx driftless-cdc` install prints
+  the warning. Switching is a new dependency (CONSTRAINTS rule 4, D-017): plan it, don't just do it.
 
 - Schema-change handling (`ALTER TABLE` is untested).
 - D-027 (lanes) was written for Meilisearch alone; with Redis (fast) beside it, Meilisearch still sets the pace, so it
