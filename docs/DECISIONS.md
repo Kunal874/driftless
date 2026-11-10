@@ -36,6 +36,7 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
 | D-028 | Config file for what/where, env for secrets and tuning; check it before creating anything | Accepted | T10 |
 | D-029 | Redis as a second sink: hashes, both-or-nothing, durable acknowledgements, readers never write | Accepted | T12 |
 | D-030 | Several tables per instance: one mirror per table, one stream, per-table backfill rounds | Accepted | T13 |
+| D-031 | Alerts: a Prometheus rule file; the slot alerts measure the share of the cap; `up` for a dead connector | Accepted | T14 |
 
 ---
 
@@ -413,3 +414,24 @@ Short reasoning lives here; the long plain-language version lives in `learn/`.
   its own slot (each holding WAL), and a cross-table transaction would be confirmed in pieces.
 - **Limits:** every mirrored table lives in the same database; single-column primary keys; plain lower-case names.
   Changing a table's column filter needs a forced backfill to rewrite its documents.
+
+### D-031 — Alerts: a Prometheus rule file; the slot alerts measure the share of the cap; `up` for a dead connector
+- **Decision:** ship `docker/prometheus/alerts.yml` with five rules (`DriftlessDown`, `DriftlessStalled`,
+  `DriftlessLagHigh`, `DriftlessSlotWalHigh` at 50 % of the cap, `DriftlessSlotWalCritical` at 80 %), unit-tested with
+  `promtool test rules` in CI and made to fire on the real stack (`scripts/alert-drill.sh`, RESULTS §14).
+- **A dead connector can't report itself:** the slot gauges come from Driftless, so when it's dead (the case that fills
+  the disk) they vanish. `DriftlessDown` uses Prometheus's own `up`. Rejected: postgres_exporter to watch the slot from
+  outside (a new service; `up == 0` plus the cap, D-026, already cover it).
+- **Share of the cap, not bytes:** new gauge `driftless_slot_safe_wal_bytes` (`safe_wal_size`). The rules use
+  `retained / (retained + safe)`, so one file fits any `max_slot_wal_keep_size`. Measured: `retained + safe` exceeds the
+  cap by ~10–11 MB (Postgres counts from a 16 MB segment boundary), so the share reads 1–4 % low. Rejected: a fixed byte
+  threshold (right only for our 1 GB). Without a cap `safe` is NULL and the slot alerts can't fire, so Driftless warns
+  at startup.
+- **Stalled uses `unless`, not `and`:** the applied-changes counter has no series until the first change after a
+  restart. With `and`, a connector restarted while a sink is down would never alert. The unit test covers it, and a
+  mutant with `and` fails it.
+- **No Alertmanager in the demo stack:** routing (Slack, email, a pager) belongs to the user's setup. Prometheus lists
+  the alerts at `/alerts`, and the dashboard shows them.
+- **Consequences:** users must scrape Driftless as job `driftless` or edit one label. The thresholds are starting points;
+  the file says so.
+

@@ -29,7 +29,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
  │      └─► ack commit LSN to Postgres (only after apply) → slot advances       │
  │                                                                              │
  │ backfill (T07): chunked SELECT between watermarks ─► same lanes              │
- │ metrics  (T09): /metrics ◄── Prometheus ◄── Grafana                          │
+ │ metrics  (T09): /metrics ◄── Prometheus (+ alert rules, T14) ◄── Grafana     │
  └────────────────────┬──────────────────────────────────────┬──────────────────┘
                       │ HTTP: documents + tasks API (7700)   │ RESP3, MULTI per batch (6381)
                       ▼                                      ▼
@@ -67,7 +67,7 @@ writes **only** to Postgres; Driftless is the only thing that writes to the inde
 | Backfill | snapshot existing rows between watermarks, column-aware; progress saved + resumed per table, one table at a time; resume beats request across tables (D-023, D-024, D-030, BUG-002/003) | `src/source/backfill.ts` | T07 | ✅ |
 | Backpressure | pause the replication socket at the pending cap, resume at half; 10 s status re-send (D-025) | `src/pipeline/backpressure.ts`, `src/main.ts` | T08 | ✅ |
 | WAL safety | slot WAL capped at 1 GB (compose); refuse to start on a lost slot (D-026) | `docker-compose.yml`, `src/source/replication.ts` | T08 | ✅ |
-| Metrics | `GET /metrics` (prom-client, port 9464): lag + write-time + batch-size histograms, changes by op, queue gauges read at scrape time, slot retained WAL; Prometheus + Grafana (profile `metrics`, dashboard provisioned) | `src/metrics.ts`, `docker/` | T09 | ✅ |
+| Metrics | `GET /metrics` (prom-client, port 9464): lag + write-time + batch-size histograms, changes by op, queue gauges read at scrape time, slot retained and safe WAL; Prometheus + Grafana (profile `metrics`, dashboard provisioned); 5 alert rules with promtool tests (T14, D-031) | `src/metrics.ts`, `docker/` | T09, T14 | ✅ |
 | Config | `driftless.config.json`: connection (no secrets), one or several mappings (table → index, primary key, column include/exclude, Redis key prefix; T13); validated in full at start (`parseConfig`), then checked against the real table before anything is created (`checkSync`); env vars override (D-028) | `src/config-file.ts`, `src/config.ts`, `src/source/replication.ts` | T10 | ✅ |
 
 If the code is split differently later, update this table.
@@ -103,6 +103,8 @@ type Transaction = {
   after the write is in its fsynced AOF, so a reply means "applied and durable". Nothing else writes the cache.
 - **Prometheus → Driftless (T09):** Prometheus scrapes `GET /metrics` (port 9464) every 5 s; Grafana reads Prometheus.
   Lag = commit time (from the WAL) → the moment the transaction becomes confirmable (checkpointer callback).
+  Prometheus evaluates `docker/prometheus/alerts.yml` every 15 s (T14); `DriftlessDown` uses Prometheus's own `up`,
+  because a dead connector reports nothing.
 - **No frontend, no user auth.** Everything is local. Meilisearch is protected by a dev master
   key; Postgres by dev credentials; all ports are bound to `127.0.0.1`.
 - **Where logic lives:** database / WAL logic in `src/source/`, ordering and acks in
@@ -136,8 +138,9 @@ driftless/
 │   └── metrics.ts            Prometheus metrics + GET /metrics (T09)
 ├── scripts/                workload.sh (T02), repro-ack-off-by-one.ts (T03), reconcile.ts + chaos.sh (T05),
 │                           bench-drain.sh (T06), backfill-race.sh (T07), slow-sink.sh (T08), bench-lag.ts (T09),
-│                           ci-e2e.sh (T11), redis-crash.sh (T12)
-├── docker/                 prometheus/prometheus.yml, grafana/ provisioning + dashboard JSON (T09)
+│                           ci-e2e.sh (T11), redis-crash.sh (T12), alert-drill.sh (T14)
+├── docker/                 prometheus/prometheus.yml + alerts.yml + alerts.test.yml (T09, T14), grafana/ provisioning +
+│                           dashboard JSON (T09)
 ├── docs/                   project docs (this folder)
 │   ├── BUILD_PLAN.md  HANDOVER.md  ARCHITECTURE.md  FLOW.md
 │   ├── DECISIONS.md   CONSTRAINTS.md  TEST_CHECKLIST.md  ROLLBACK.md

@@ -164,16 +164,16 @@ Handy commands:
       it (after clearing its sinks) backfills just that table
 - [x] Backfill race with two tables, cross-table writes and 7 SIGKILLs: resumes, never restarts finished work, 0 drift
 
-## T14 — Alerts
+## T14 — Alerts ✅ (verified 2026-11-11)
 
-- [ ] `GET /metrics` shows `driftless_slot_safe_wal_bytes`; a Postgres without a slot WAL cap gets a startup warning
-- [ ] `promtool check rules` and `promtool test rules`: every alert fires on its synthetic series and stays silent on a
+- [x] `GET /metrics` shows `driftless_slot_safe_wal_bytes`; a Postgres without a slot WAL cap gets a startup warning
+- [x] `promtool check rules` and `promtool test rules`: every alert fires on its synthetic series and stays silent on a
       healthy one (no traffic → no lag alert; idle connector → no stall alert); both run in CI
-- [ ] Live: connector killed → `DriftlessDown` fires, then resolves after a restart
-- [ ] Live: Meilisearch paused under load → `DriftlessStalled`
-- [ ] Live: cap lowered to 64 MB, Meilisearch paused under load → `DriftlessSlotWalHigh`, then `DriftlessSlotWalCritical`
+- [x] Live: connector killed → `DriftlessDown` fires, then resolves after a restart
+- [x] Live: Meilisearch paused under load → `DriftlessStalled`
+- [x] Live: cap lowered to 64 MB, Meilisearch paused under load → `DriftlessSlotWalHigh`, then `DriftlessSlotWalCritical`
       before the slot is lost; cap reset; reconcile → 0 drift
-- [ ] The dashboard's "Firing alerts" panel shows them
+- [x] The dashboard's "Firing alerts" panel shows them
 
 ## T15 — Publish
 

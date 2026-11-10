@@ -95,6 +95,13 @@ reproduced on purpose in T07.2: 42 documents wrong).
 5. On start, Driftless sees `wal_status = 'lost'` and stops with recovery steps: drop and recreate
    the slot, then re-backfill. It never "just continues" (changes were lost).
 
+**Someone finds out before step 4 (T14, D-031):** `DriftlessStalled` fires ~5 min after step 1 under load;
+`DriftlessDown` 2 min after Driftless dies; `DriftlessSlotWalHigh` at 50 % of the cap and `DriftlessSlotWalCritical`
+at 80 %. Without a cap there is no step 4 and no slot alert: the disk fills (Driftless warns at startup).
+
+**Where it can break:** an alert can't help if nobody receives it (routing is the user's Alertmanager), and a WAL that
+grows from 80 % to 100 % of the cap in under a minute beats `for: 1m` (size the cap; RESULTS §14).
+
 ---
 
 ## Flow 5 — One transaction across two tables, into two sinks · ✅ built in T12–T13 (D-029, D-030)

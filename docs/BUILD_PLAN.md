@@ -69,7 +69,7 @@ atomicity inside the index. High availability (stretch S2).
 | T11 | Polish after release (owner asked 2026-10-23) | 6 | ✅ |
 | T12 | Redis cache as a second sink (approved 2026-10-23) | 7 | ✅ |
 | T13 | Multiple tables per instance (approved 2026-10-23) | 7–8 | ✅ |
-| T14 | Alerts: slot WAL, connector down or stalled, lag | 9 | approved 2026-11-11 |
+| T14 | Alerts: slot WAL, connector down or stalled, lag (approved 2026-11-11) | 9 | ✅ |
 | T15 | Publish: image on GHCR, CLI on npm; release `v0.3.0` | 9 | approved 2026-11-11 |
 | S1–S4 | Stretch goals | if ahead | ✂ cut first |
 
@@ -466,7 +466,7 @@ must be skipped. Keep the existing single-table config files valid.
 
 ---
 
-## T14 — Alerts: slot WAL, connector down or stalled, lag (approved by the owner 2026-11-11)
+## T14 — Alerts: slot WAL, connector down or stalled, lag ✅ (approved by the owner 2026-11-11)
 
 **Goal:** the operational promise is real: "the slot can't fill the disk, and someone finds out before Postgres
 sacrifices it." We ship a Prometheus rule file anyone can drop into their own Prometheus. It fires when Driftless is down
@@ -512,7 +512,7 @@ live.
       longer works), Meilisearch paused under load, the WAL grown in steps with `pg_logical_emit_message` →
       `SlotWalHigh`, then `SlotWalCritical` *before* the slot is lost; then unpause, reconcile → 0 drift, cap back to
       1 GB; (d) record how close `retained + safe` is to the cap. All three: `scripts/alert-drill.sh down|stalled|slot`
-- [ ] T14.6 README (monitoring: the alerts, using the rule file with your own Prometheus, the job label), ARCHITECTURE,
+- [x] T14.6 README (monitoring: the alerts, using the rule file with your own Prometheus, the job label), ARCHITECTURE,
       FLOW, D-031, `learn/task-14-alerts.md`, checkpoint
 
 **Dependencies:** none new (`promtool` ships in the Prometheus image we already pin).

@@ -217,9 +217,31 @@ or `FULL`. Driftless creates its own publication, slot and two small bookkeeping
 - `driftless_write_seconds{sink}` (one write to Meilisearch or Redis) and `driftless_batch_changes`;
 - `driftless_changes_applied_total{op}`;
 - the gauges changes waiting, transactions in flight, reading paused and confirmed LSN;
-- `driftless_slot_retained_wal_bytes`, the WAL Postgres keeps for the slot.
+- `driftless_slot_retained_wal_bytes`, the WAL Postgres keeps for the slot, and `driftless_slot_safe_wal_bytes`, how
+  much more it may keep before it invalidates the slot.
 
-The `metrics` profile adds Prometheus and a provisioned 15-panel Grafana dashboard ([docker/](docker/)).
+The `metrics` profile adds Prometheus and a provisioned Grafana dashboard ([docker/](docker/)), with the alerts on top.
+
+**Cap the slot's WAL.** Postgres keeps WAL for a stopped Driftless until its disk is full, unless you set
+`max_slot_wal_keep_size` (e.g. `1GB`; the compose file does). With a cap, Postgres gives the slot up instead, and
+Driftless refuses to start until you recover ([docs/ROLLBACK.md](docs/ROLLBACK.md)). Driftless warns at startup when
+there's no cap.
+
+**Alerts.** [docker/prometheus/alerts.yml](docker/prometheus/alerts.yml) holds five Prometheus rules. To use them in
+your own Prometheus, list the file under `rule_files:` and scrape Driftless as job `driftless` (or change that label in
+the file). Send them on with your own Alertmanager.
+
+| Alert | Fires when | Severity |
+|---|---|---|
+| `DriftlessDown` | Prometheus can't scrape Driftless for 2 min | critical |
+| `DriftlessStalled` | transactions are waiting but nothing was applied for ~5 min (a sink is down or failing) | critical |
+| `DriftlessLagHigh` | lag p99 > 60 s for 10 min | warning |
+| `DriftlessSlotWalHigh` | the slot holds over 50 % of `max_slot_wal_keep_size` for 5 min | warning |
+| `DriftlessSlotWalCritical` | over 80 % for 1 min: next comes invalidation and a full backfill | critical |
+
+The slot alerts use the share of the cap (`retained / (retained + safe)`), so they work for any cap; without a cap they
+can't fire. Each one was made to fire on the real stack ([RESULTS §14](docs/RESULTS.md)), and `promtool test rules`
+checks them in CI.
 
 ## Testing
 
@@ -241,6 +263,7 @@ and config validation. The claims are proven by scripts against the real stack:
 | `scripts/chaos.sh DURATION KILL_EVERY RATE` | 0 drift with random SIGKILLs under load |
 | `scripts/backfill-race.sh DELAY RATE SECONDS [KILL_EVERY]` | backfill racing concurrent writes (and crashes) |
 | `scripts/slow-sink.sh PAUSE RATE MAX_PENDING [SERVICE]` | bounded memory while Meilisearch (or `redis`) is frozen |
+| `scripts/alert-drill.sh down\|stalled\|slot [RATE]` | each alert fires for real, then resolves (needs the `metrics` profile) |
 | `scripts/redis-crash.sh always\|everysec\|rdb` | SIGKILL Redis under load, then reconcile the cache (own compose project) |
 | `scripts/bench-drain.sh LANES BATCH_MAX RATE SECONDS` | backlog drain throughput |
 | `node scripts/bench-lag.ts RATE SECONDS CLIENTS` | end-to-end lag quantiles at a fixed write rate |

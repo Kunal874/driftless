@@ -1,44 +1,28 @@
 # Handover — where we left off
 
-Updated 2026-10-23, end of T10 (session 1). **The build plan is complete.** Overwrite this at every checkpoint: it
-describes *now*; history lives in git.
+Updated 2026-11-11, end of T14. Overwrite this at every checkpoint: it describes *now*; history lives in git.
 
 ## Current state
 
-- Last checkpoint: **T13 — Multiple tables per instance** (tag `checkpoint/T13`).
-- Released: **`v0.2.0`** (Redis cache + several tables; T12–T13). `v0.1.0` = T10.
-- Published: **https://github.com/Kunal874/driftless** (public, MIT). v0.2.0 is pushed with CI green.
-- `pg-logical-replication` upgraded to 2.6.0 (2026-10-24, a recorded D-017 exception, commit `2c39d55`, pushed):
-  `sendStatus` passes `end` unchanged, the contract test expects that, and the BUG-001 repro now adds the 1 itself.
-- **Approved 2026-11-11:** T14 (alerts) and T15 (publish to GHCR + npm as `driftless-cdc`, release `v0.3.0`).
-- **T14 in progress.** T14.1 ✅: gauge `driftless_slot_safe_wal_bytes` (Postgres's `safe_wal_size`, NaN without a cap);
-  a startup warning when `max_slot_wal_keep_size` is unlimited (checked live with `PG_MAX_SLOT_WAL_KEEP_SIZE=-1`).
-  Compose now reads the cap from `PG_MAX_SLOT_WAL_KEEP_SIZE` (default `1GB`): a `-c` setting beats `ALTER SYSTEM`, so
-  T14.5 lowers the cap by recreating `postgres` with that variable, not with `ALTER SYSTEM` as T08.4 did.
-- T14.2 ✅: `docker/prometheus/alerts.yml` (5 alerts) + `alerts.test.yml`; `promtool test rules` passes, and a
-  mutant (`and` instead of `unless` in `DriftlessStalled`) fails the restart case. Prometheus loads the rules (all `ok`,
-  `inactive` on the healthy stack); compose mounts the whole `docker/prometheus/` folder. promtool compares annotations
-  exactly, so each alert has one templated `summary` only.
-- T14.3 ✅: the CI unit job runs `promtool check config` + `promtool test rules` from `prom/prometheus:v3.15.0`.
-  Passed locally with the same commands; **not yet run on GitHub** (nothing pushed since `2c39d55`).
-- T14.4 ✅: dashboard panel "Alerts: pending and firing" (table of `ALERTS{alertname=~"Driftless.*"}`) on top; the
-  other panels moved down 5 rows. Seen with alerts in it: during T14.5.
-- T14.5 ✅ (RESULTS §14): `scripts/alert-drill.sh down|stalled|slot`. Down fired 2 min 30 s after a SIGKILL; Stalled
-  5 min 26 s after freezing Meilisearch under 200 tx/s; SlotWalHigh/Critical at 60 % and 87 % of the cap, before the
-  slot was lost, at 1 GB and at 256 MB; every alert resolved; 0 drift after each drill. The first slot run fell back to
-  1 GB (`docker compose up connector` recreated Postgres from its model): fixed with `--no-deps` + a cap check.
-  The stack is back to normal: cap 1 GB, slot `reserved`; prometheus + grafana running.
-- Next step: **T14.6** (BUILD_PLAN.md).
+- Last checkpoint: **T14 — Alerts** (tag `checkpoint/T14`).
+- Released: **`v0.2.0`** (T12–T13). `v0.3.0` will be T14 + T15. `v0.1.0` = T10.
+- Published: **https://github.com/Kunal874/driftless** (public, MIT). `origin/main` = `2c39d55` (the
+  `pg-logical-replication` 2.6.0 upgrade, a recorded D-017 exception). **Everything from the T14/T15 plan on is local,
+  not pushed**: push only with the owner's go-ahead. CI's new promtool step has therefore not run on GitHub yet.
+- **Approved 2026-11-11:** T15 (publish the image to GHCR and the CLI to npm as `driftless-cdc`, release `v0.3.0`).
+- Next step: **T15.1** (BUILD_PLAN.md).
 - Throwaway compose projects (`driftless-redis`, `driftless-ci`) are removed, volumes included.
 
 ## What the system holds right now
 
-- `products`: 289,886 rows and `customers`: 20,517 rows; their indexes (`products`, `customers`) and Redis keys
-  (`product:*`, `customer:*`) are **identical** to them (last reconcile 0 / 0 / 0 everywhere, after the T13.5 runs).
+- `products`: 300,216 rows and `customers`: 20,935 rows; their indexes and Redis keys are **identical** to them (last
+  reconcile 0 / 0 / 0 everywhere, after the T14.5 slot drill).
 - The shipped config mirrors both tables; the publication holds products, customers and the watermark table.
 - Redis 8.10.1 on 127.0.0.1:6381, AOF `appendfsync always`, volume `driftless_redisdata`.
-- Slot `driftless_slot` caught up. Postgres runs with `max_slot_wal_keep_size=1GB`.
-- `postgres`, `meilisearch`, `redis` and `connector` are **running**; `prometheus` and `grafana` are stopped.
+- Slot `driftless_slot` `reserved`. Postgres runs with `max_slot_wal_keep_size=1GB` (compose variable
+  `PG_MAX_SLOT_WAL_KEEP_SIZE`, default `1GB`).
+- **Everything is running**: `postgres`, `meilisearch`, `redis`, `connector`, `prometheus` (with the alert rules, all
+  inactive) and `grafana`.
 
 ## Done
 
@@ -74,6 +58,15 @@ describes *now*; history lives in git.
   - Demo: `customers` table + seed, `WORKLOAD_MIX=multi` with cross-table transactions; CI runs two tables.
   - Proofs (RESULTS §13): add, remove, re-add a table; a two-table backfill race with 7 SIGKILLs; chaos with
     cross-table transactions (11 SIGKILLs); all 0 drift. `npm test` 69/69.
+- **T14 ✅** Alerts (D-031):
+  - `docker/prometheus/alerts.yml`: `DriftlessDown` (Prometheus's `up`: a dead connector reports nothing),
+    `DriftlessStalled` (`unless`, so a restart with no applied changes yet still alerts), `DriftlessLagHigh`,
+    `DriftlessSlotWalHigh` / `Critical` (share of the cap: retained / (retained + safe), any cap).
+  - New gauge `driftless_slot_safe_wal_bytes`; a startup warning when the slot WAL cap is unlimited.
+  - `alerts.test.yml` with `promtool test rules` (a mutant with `and` fails it); CI runs it. Dashboard panel on top.
+  - Proofs (RESULTS §14, `scripts/alert-drill.sh`): Down 2.5 min after a SIGKILL; Stalled 5.4 min after freezing
+    Meilisearch under load; slot alerts at 60 % and 87 %, at the 1 GB and a 256 MB cap, before the slot was lost; all
+    resolved; 0 drift after each. `npm test` 70/70.
 
 ## Ideas, if the owner wants more (none started)
 
@@ -81,16 +74,14 @@ describes *now*; history lives in git.
 - D-027 (lanes) was written for Meilisearch alone; with Redis (fast) beside it, Meilisearch still sets the pace, so it
   stands. Re-measure if a faster search sink ever replaces it.
 
-## Files changed in T13
+## Files changed in T14
 
-`src/config-file.ts` (+ test) (list, prefixes, uniqueness), `src/config.ts` (`mappings`), `src/main.ts` (mirrors,
-routing, per-table backfill rounds), `src/pipeline/lanes.ts` (+ test) (`table:id`), `src/source/backfill.ts` (+ test)
-(per-table progress, migration, `scheduleBackfill`), `src/source/replication.ts` (publication sync, recovery text),
-`src/metrics.ts` (`table` label), `scripts/reconcile.ts` (per table), `scripts/workload.sh` (`WORKLOAD_MIX`),
-`scripts/backfill-race.sh`, `scripts/ci-e2e.sh`, `scripts/redis-crash.sh`, `db/init/02-customers.sql`,
-`db/seed-customers.sql`, `db/workload/customer_*.sql` + `cross_table.sql` (new), `driftless.config.json` (two tables),
-`docs/` (DECISIONS D-030, RESULTS §13, ARCHITECTURE, FLOW 5, ROLLBACK, BUILD_PLAN, TEST_CHECKLIST), `README.md`,
-`AGENTS.md`, `learn/task-13-multi-table.md`
+`src/main.ts` (safe-WAL gauge), `src/source/replication.ts` (no-cap warning), `docker-compose.yml`
+(`PG_MAX_SLOT_WAL_KEEP_SIZE`; the whole `docker/prometheus/` folder mounted), `docker/prometheus/prometheus.yml`
+(`rule_files`, 15 s evaluation), `docker/prometheus/alerts.yml` + `alerts.test.yml` (new),
+`docker/grafana/dashboards/driftless.json` (alerts panel), `.github/workflows/ci.yml` (promtool),
+`scripts/alert-drill.sh` (new), `docs/` (BUILD_PLAN T14/T15, TEST_CHECKLIST, RESULTS §14, DECISIONS D-031, ARCHITECTURE,
+FLOW 4), `README.md` (cap + alerts), `AGENTS.md`, `learn/task-14-alerts.md`
 
 ## Environment (verified 2026-10-23)
 
@@ -114,6 +105,10 @@ routing, per-table backfill rounds), `src/pipeline/lanes.ts` (+ test) (`table:id
 - Long runs (chaos, benchmarks, backfill races, slow-sink) belong in the background.
 - `docker compose up -d --force-recreate` deletes the old container's logs. Save logs first if you need them (BUG-004 lesson).
 - Docker Desktop may be stopped at session start. Start it before `docker compose up -d --wait`.
+- `docker compose up -d connector` also **recreates a dependency whose config differs** from the compose file as read
+  now (e.g. Postgres started with `PG_MAX_SLOT_WAL_KEEP_SIZE=256MB` goes back to 1 GB). Use `--no-deps` (T14.5).
+- The slot WAL cap is a `-c` flag, which beats `ALTER SYSTEM`: change it with `PG_MAX_SLOT_WAL_KEEP_SIZE` and recreate
+  `postgres`, then recreate it without the variable to restore 1 GB.
 - Init scripts in `db/init/` only run on an **empty** volume (`docker compose down -v` wipes data; ask first).
 - The index keeps growing with every benchmark (vocabulary too), so Meilisearch gets slower over time. Benchmarks are
   only comparable on the same index state; record it with each run (RESULTS §8–9).
